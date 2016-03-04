@@ -77,7 +77,7 @@ def format_obj(fmt, obj, *args, **kwargs):
 ####################################################################################
 # Main() and helpers
 
-def parse_args(argv=None, cmds=None, defaultcmd=None):
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description=__doc__)
 
@@ -95,19 +95,32 @@ def parse_args(argv=None, cmds=None, defaultcmd=None):
                        action="store_const",
                        help="Verbose mode, output extra info.")
 
-    group.add_argument('-d', '--datadir',
-                       dest='datadir',
-                       default=DATADIR,
-                       help="Game data directory. [Default: %(default)s]")
+    parser.add_argument('-d', '--datadir',
+                        dest='datadir',
+                        default=DATADIR,
+                        help="Game data directory. [Default: %(default)s]")
 
-    parser.add_argument(dest='cmd',
-                        nargs='?',
-                        #choices=cmds or [],
-                        default=defaultcmd,
-                        metavar="COMMAND",
-                        help="Command to execute. "
-                            " Available commands are: [%(choices)s]"
+    parser.add_argument('-f', '--format',
+                        dest='format',
+                        choices=('bare', 'pretty', 'wiki'),
+                        default='bare',
+                        help="Output format. 'wiki' is awesome!"
+                            " Available formats: [%(choices)s]."
                             " [Default: %(default)s]")
+
+    parser.add_argument(dest='entity',
+                        nargs="?",
+                        choices=('locations', 'qualities', 'events', 'demo', 'test'),
+                        default='locations',
+                        metavar="ENTITY",
+                        help="Entity to work on."
+                            " Available entities: [%(choices)s]."
+                            " [Default: %(default)s]")
+
+    parser.add_argument(dest='filter',
+                        nargs='?',
+                        metavar="FILTER",
+                        help="Optional name filter to narrow results")
 
     args = parser.parse_args(argv)
     args.debug = args.loglevel == logging.DEBUG
@@ -116,7 +129,7 @@ def parse_args(argv=None, cmds=None, defaultcmd=None):
 
 
 def main(argv=None):
-    args = parse_args(argv or [], ('events','pretty','qualities', 'locations'))
+    args = parse_args(argv or [])
     logging.basicConfig(level=args.loglevel,
                         format='%(levelname)s: %(message)s')
     log.debug(args)
@@ -127,32 +140,20 @@ def main(argv=None):
     log.debug(ss.qualities)
     log.debug(ss.events)
 
-    if args.cmd == "events":
-        for event in ss.events:
-            if not event.name:
-                log.warning("Event with no name: %d", event.id)
-            safeprint(format_obj("{idx}\t{event}", event, event=event))
+    if args.entity in ('locations', 'qualities', 'events'):
+        entities = getattr(ss, args.entity).find(args.filter)
+        if args.format == 'wiki':
+            safeprint(entities.wikitable())
+        elif args.format == 'pretty':
+            safeprint(entities.pretty())
+        else:
+            safeprint(entities.show())
         return
 
-    elif args.cmd == "pretty":
+    elif args.entity == "demo":
         for event in ss.events.at(name="Pigmote Isle"):  # ID = 102804
             safeprint(event.pretty())
             safeprint()
-        return
-
-    elif args.cmd == "qualitiesold":
-        for i, quality in enumerate(ss.qualities.itervalues(), 1):
-            quality['i'] = i
-            safeprint("{i}\t{Id}\t{Name}".format(**quality))
-        return
-
-    elif args.cmd == "qualities":
-        for i, quality in enumerate(ss.qualities.itervalues(), 1):
-            quality['i'] = i
-            safeprint("{i}\t{Id}\t{Name}".format(**quality))
-        return
-
-    elif args.cmd == "locations":
         location = ss.locations.get(102004)
         safeprint(repr(location))
         safeprint(location)
@@ -160,13 +161,15 @@ def main(argv=None):
         safeprint(locations)
         for location in ss.locations[3:6]:
             safeprint(location.pretty())
-        return
-
-    elif args.cmd == "super":
         for event in ss.events.at(name="Pigmote Isle").find("rose"):
-            safeprint(event)
+            safeprint(repr(event))
         return
 
+    # Testing area..
+
+    for event in ss.events:
+        for field in event.dump():
+            safeprint(field)
 
 
 
@@ -195,6 +198,16 @@ class Entity(object):
         if self.name:  pretty += " - {}".format(self.name)
         if self.image: pretty += " ({})".format(self.image)
         return pretty
+
+    def wikirow(self):
+        return format_obj(
+            "|-\n"
+            "| {idx}\n"
+            "| {id}\n"
+            "| [[{name}]]\n"
+            "| {{{{game icon|{image}}}}}\n"
+            "| <nowiki>{description}</nowiki>\n",
+            self)
 
     def __repr__(self):
         if self.name:
@@ -230,11 +243,33 @@ class Entities(object):
                 self._entities[entity.id] = entity
                 self._order.append(entity)
 
-    def find(self, name=""):
-        '''Return Entities filtered by name, case-insensitive.'''
+    def find(self, name):
+        '''Return Entities filtered by name, case-insensitive.
+            If falsy, return all entities
+        '''
+        if not name:
+            return self
         return self.__class__(entities=(_ for _ in self
                                         if re.search(name, _.name,
                                                      re.IGNORECASE)))
+
+    def wikitable(self):
+        table = ('{| class="ss-table sortable" style="width: 100%;"\n'
+            '! Index\n'
+            '! ID\n'
+            '! Name\n'
+            '! Icon\n'
+            '! Description\n'
+        )
+        table += "".join((_.wikirow() for _ in self))
+        table += '|-\n|}'
+        return table
+
+    def pretty(self):
+        return "\n".join((_.pretty() for _ in self))
+
+    def show(self):
+        return "\n".join((str(_) for _ in self))
 
     def get(self, eid, default=None):
         '''Get entity by ID'''
@@ -292,6 +327,10 @@ class Locations(Entities):
     EntityCls=Location
 
 
+class Action(Entity):
+    pass
+
+
 class Event(Entity):
 
     _REQ_DONT_IMPORT = ('AssociatedQuality', 'Id')
@@ -301,26 +340,26 @@ class Event(Entity):
 
         self.location = None
         if 'LimitedToArea' in self._data:
-            lid = self._data['LimitedToArea']['Id']
+            iid = self._data['LimitedToArea']['Id']
             if locations:
-                self.location = locations.get(lid)
+                self.location = locations.get(iid)
 
             if not self.location:
-                log.warning("Could not find Location for %r: %d", self, lid)
+                log.warning("Could not find Location for %r: %d", self, iid)
                 self.location = Location(self._data['LimitedToArea'])
 
         self.requirements = []
-        for req in self._data['QualitiesRequired']:
-            qid = req['AssociatedQuality']['Id']
+        for item in self._data['QualitiesRequired']:
+            iid = item['AssociatedQuality']['Id']
             if qualities:
-                quality = qualities.get(qid)
+                quality = qualities.get(iid)
 
             if not quality:
-                log.warning("Could not find Quality for %r: %d", self, qid)
-                quality = Quality(req['AssociatedQuality'])
+                log.warning("Could not find Quality for %r: %d", self, iid)
+                quality = Quality(item['AssociatedQuality'])
 
             self.requirements.append((quality,
-                                      {_:req[_] for _ in req
+                                      {_:item[_] for _ in item
                                        if _ not in self._REQ_DONT_IMPORT}))
         self.actions = []
 
@@ -328,7 +367,7 @@ class Event(Entity):
         pretty = super(Event, self).pretty()
 
         if self.location:
-            pretty += "\n\tLocation: {}".format(self.location.pretty())
+            pretty += "\n\tLocation: {}".format(self.location)
 
         pretty += "\n\tRequirements: {:d}".format(len(self.requirements))
         for req in self.requirements:
@@ -337,66 +376,17 @@ class Event(Entity):
         return pretty
 
 
-class Events(object):
-    entity='events'
-
-    def __init__(self, datadir=None, qualities=None, locations=None, events=None):
-        self.events = {}
-        self._order = []
-
-        self.qualities = qualities or {_['Id']:_ for _ in self._load(datadir, 'qualities')}
-        self.locations = locations or {_['Id']:_ for _ in self._load(datadir, 'areas')}
-
-        if events is not None:
-            for event in events:
-                self.events[event.id] = event
-                self._order.append(event.id)
-        else:
-            data = self._load(datadir)
-            for i, obj in enumerate(data, 1):
-                event = Event(obj, i, self.qualities, self.locations)
-                self.events[event.id] = event
-                self._order.append(event.id)
-
-    def find(self, name):
-        '''Return Events filtered by name, case-insensitive.'''
-        return Events(qualities=self.qualities,
-                      locations=self.locations,
-                      events=(_ for _ in self
-                              if re.search(name, _.name, re.IGNORECASE)))
+class Events(Entities):
+    EntityCls=Event
 
     def at(self, lid=0, name=""):
-        '''Return Events by location'''
-        locations = self.locations.find(name) if (name and not lid) else []
-        return Events(qualities=self.qualities,
-                      locations=self.locations,
-                      events=(_ for _ in self if
-                              _.location and
-                              ((lid  and _.location.id == lid) or
-                               (name and _.location in locations))))
-
-    def get(self, eid, default=None):
-        '''Get event by ID. Raises ValueError if ID is not found'''
-        return self.events.get(eid, default)
-
-    def _load(self, datadir=None, entity=None):
-        path = os.path.join(datadir or DATADIR,
-                            'entities',
-                            "{}_import.json".format(entity or self.entity))
-        log.debug("Opening data file: %s", path)
-        with open(path) as fd:
-            # strict=False to allow tabs inside strings
-            return json.load(fd, strict=False)
-
-    def __iter__(self):
-        for eid in self._order:
-            yield self.events[eid]
-
-    def __len__(self):
-        return len(self.events)
-
-    def __str__(self):
-        return "<Events: {:d}>".format(len(self.events))
+        '''Return Events by location ID or name'''
+        return Events(entities=(_ for _
+                                in self
+                                if (_.location and
+                                    ((lid  and _.location.id == lid) or
+                                     (name and re.search(name, _.location.name,
+                                                         re.IGNORECASE))))))
 
 
 class SunlessSea(object):
@@ -407,7 +397,9 @@ class SunlessSea(object):
     def __init__(self, datadir=None):
         self.qualities = Qualities(data=self._load('qualities', datadir))
         self.locations = Locations(data=self._load('areas', datadir))
-        self.events    = Events(datadir=datadir, qualities=self.qualities, locations=self.locations)
+        self.events    = Events(data=self._load('events', datadir),
+                                qualities=self.qualities,
+                                locations=self.locations)
 
     def _load(self, entity, datadir=None):
         path = os.path.join(datadir or DATADIR,
