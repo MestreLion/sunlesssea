@@ -193,8 +193,9 @@ class Entity(object):
     def dump(self):
         return self._data
 
-    def pretty(self):
-        pretty = "{:d}".format(self.id)
+    def pretty(self, _level=0):
+        indent = _level * "\t"
+        pretty = "{}{:d}".format(indent, self.id)
         if self.name:  pretty += " - {}".format(self.name)
         if self.image: pretty += " ({})".format(self.image)
         return pretty
@@ -298,13 +299,43 @@ class Quality(Entity):
     _jsonattrs = {"Category",
                   "LevelDescriptionText",
                   "ChangeDescriptionText",
+                  "LevelImageText",  # Pure evil
                   "Nature",
-                  "Tag"}
+                  "Tag",
+                  }
 
     def __init__(self, data, idx=0):
         super(Quality, self).__init__(data=data, idx=idx)
         for attr in self._jsonattrs:
             setattr(self, attr.lower(), self._data.get(attr, ""))
+
+        for attr, key in (('level_status',  'LevelDescriptionText'),
+                          ('change_status', 'ChangeDescriptionText'),
+                          ('image_status',  'LevelImageText')):
+            setattr(self, attr, self._parse_status(self._data.get(key, "")))
+
+    def _parse_status(self, value):
+        if not value:
+            return {}
+        return {int(k):v for k,v in (row.split("|") for row in value.split("~"))}
+
+    def pretty(self, _level=0):
+        pretty = super(Quality, self).pretty(_level=_level)
+        indent = _level * "\t"
+
+        for attr, caption in (('level_status',  'Journal Descriptions'),
+                              ('change_status', 'Change Descriptions'),
+                              ('image_status',  'Images')):
+            statuses = getattr(self, attr)
+            if statuses:
+                pretty += "\n{}\t{}: {:d}".format(indent,
+                                                  caption,
+                                                  len(statuses))
+                for status in sorted(statuses.iteritems()):
+                    pretty += "\n{}\t\t[{}] - {}".format(indent,
+                                                         *status)
+
+        return pretty
 
 
 class Qualities(Entities):
@@ -316,10 +347,11 @@ class Location(Entity):
         super(Location, self).__init__(data=data, idx=idx)
         self.message     = self._data.get('MoveMessage', "")
 
-    def pretty(self):
-        pretty = super(Location, self).pretty()
+    def pretty(self, _level=0):
+        pretty = super(Location, self).pretty(_level=_level)
+        indent = _level * "\t"
         for attr in ('message', 'description'):
-            pretty += "\n\t{}".format(getattr(self, attr))
+            pretty += "\n{}\t{}\n".format(indent, getattr(self, attr))
         return pretty
 
 
@@ -327,16 +359,36 @@ class Locations(Entities):
     EntityCls=Location
 
 
-class Action(Entity):
-    pass
+class BaseEvent(Entity):
+    '''Base class for Event, Action and Effect, as they have a very similar format'''
+
+    _REQ_DEFAULT = ('AssociatedQuality', 'Id')
+
+    def __init__(self, data, idx=0, qualities=None):
+        super(BaseEvent, self).__init__(data=data, idx=idx)
+        self.requirements = self._load_requirements(self._data['QualitiesRequired'],
+                                                    qualities)
+
+    def _load_requirements(self, data, qualities):
+        requirements = []
+        for item in data:
+            iid = item['AssociatedQuality']['Id']
+            if qualities:
+                quality = qualities.get(iid)
+
+            if not quality:
+                log.warning("Could not find Quality for %r: %d", self, iid)
+                quality = Quality(item['AssociatedQuality'])
+
+            requirements.append((quality,
+                                 {_:item[_] for _ in item
+                                  if _ not in self._REQ_DEFAULT}))
+        return requirements
 
 
-class Event(Entity):
-
-    _REQ_DONT_IMPORT = ('AssociatedQuality', 'Id')
-
+class Event(BaseEvent):
     def __init__(self, data, idx=0, qualities=None, locations=None):
-        super(Event, self).__init__(data=data, idx=idx)
+        super(Event, self).__init__(data=data, idx=idx, qualities=qualities)
 
         self.location = None
         if 'LimitedToArea' in self._data:
@@ -348,32 +400,45 @@ class Event(Entity):
                 log.warning("Could not find Location for %r: %d", self, iid)
                 self.location = Location(self._data['LimitedToArea'])
 
-        self.requirements = []
-        for item in self._data['QualitiesRequired']:
-            iid = item['AssociatedQuality']['Id']
-            if qualities:
-                quality = qualities.get(iid)
-
-            if not quality:
-                log.warning("Could not find Quality for %r: %d", self, iid)
-                quality = Quality(item['AssociatedQuality'])
-
-            self.requirements.append((quality,
-                                      {_:item[_] for _ in item
-                                       if _ not in self._REQ_DONT_IMPORT}))
         self.actions = []
+        for i, item in enumerate(self._data.get('ChildBranches', [])):
+            self.actions.append(Action(data=item, idx=i,
+                                       qualities=qualities,
+                                       locations=locations))
 
-    def pretty(self):
-        pretty = super(Event, self).pretty()
+
+
+    def pretty(self, _level=0):
+        pretty = super(Event, self).pretty(_level=_level)
+        indent = _level * "\t"
+
+        pretty += "\n{}\t{}".format(indent, self.description)
 
         if self.location:
-            pretty += "\n\tLocation: {}".format(self.location)
+            pretty += "\n{}\tLocation: {}".format(indent,
+                                                  self.location)
 
-        pretty += "\n\tRequirements: {:d}".format(len(self.requirements))
-        for req in self.requirements:
-            pretty += "\n\t\t{}: {}".format(req[0].pretty(), req[1])
+        pretty += "\n{}\tRequirements: {:d}".format(indent,
+                                                    len(self.requirements))
+        for item in self.requirements:
+            pretty += "\n{}\t\t{}: {}".format(indent,
+                                              item[0].pretty(),
+                                              item[1])
 
-        return pretty
+        if self.actions:
+            pretty += "\n\n{}\tActions: {:d}".format(indent,
+                                                   len(self.actions))
+            for item in self.actions:
+                pretty += "\n{}{}".format(indent,
+                                          item.pretty(_level=_level+2))
+
+        return pretty + '\n'
+
+# Currently a subclass of Event, so it performs
+# When I'm confident about the structure and their differences
+# it can change to BaseEvent
+class Action(Event):
+    pass
 
 
 class Events(Entities):
