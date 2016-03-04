@@ -103,7 +103,7 @@ def parse_args(argv=None):
     parser.add_argument('-f', '--format',
                         dest='format',
                         choices=('bare', 'pretty', 'wiki'),
-                        default='bare',
+                        default='pretty',
                         help="Output format. 'wiki' is awesome!"
                             " Available formats: [%(choices)s]."
                             " [Default: %(default)s]")
@@ -111,7 +111,7 @@ def parse_args(argv=None):
     parser.add_argument(dest='entity',
                         nargs="?",
                         choices=('locations', 'qualities', 'events', 'demo', 'test'),
-                        default='locations',
+                        default='test',
                         metavar="ENTITY",
                         help="Entity to work on."
                             " Available entities: [%(choices)s]."
@@ -166,10 +166,8 @@ def main(argv=None):
         return
 
     # Testing area..
-
-    for event in ss.events:
-        for field in event.dump():
-            safeprint(field)
+    event = ss.events.get(208079)
+    safeprint(event.pretty())
 
 
 
@@ -198,6 +196,7 @@ class Entity(object):
         pretty = "{}{:d}".format(indent, self.id)
         if self.name:  pretty += " - {}".format(self.name)
         if self.image: pretty += " ({})".format(self.image)
+        pretty += "\n"
         return pretty
 
     def wikirow(self):
@@ -328,11 +327,11 @@ class Quality(Entity):
                               ('image_status',  'Images')):
             statuses = getattr(self, attr)
             if statuses:
-                pretty += "\n{}\t{}: {:d}".format(indent,
+                pretty += "{}\t{}: {:d}\n".format(indent,
                                                   caption,
                                                   len(statuses))
                 for status in sorted(statuses.iteritems()):
-                    pretty += "\n{}\t\t[{}] - {}".format(indent,
+                    pretty += "{}\t\t[{}] - {}\n".format(indent,
                                                          *status)
 
         return pretty
@@ -351,7 +350,7 @@ class Location(Entity):
         pretty = super(Location, self).pretty(_level=_level)
         indent = _level * "\t"
         for attr in ('message', 'description'):
-            pretty += "\n{}\t{}\n".format(indent, getattr(self, attr))
+            pretty += "{}\t{}\n\n".format(indent, getattr(self, attr))
         return pretty
 
 
@@ -364,12 +363,7 @@ class BaseEvent(Entity):
 
     _REQ_DEFAULT = ('AssociatedQuality', 'Id')
 
-    def __init__(self, data, idx=0, qualities=None):
-        super(BaseEvent, self).__init__(data=data, idx=idx)
-        self.requirements = self._load_requirements(self._data['QualitiesRequired'],
-                                                    qualities)
-
-    def _load_requirements(self, data, qualities):
+    def _load_qualities(self, data, qualities):
         requirements = []
         for item in data:
             iid = item['AssociatedQuality']['Id']
@@ -387,9 +381,10 @@ class BaseEvent(Entity):
 
 
 class Event(BaseEvent):
-    def __init__(self, data, idx=0, qualities=None, locations=None):
-        super(Event, self).__init__(data=data, idx=idx, qualities=qualities)
+    def __init__(self, data, idx=0, qualities=None, locations=None, parent=None):
+        super(Event, self).__init__(data=data, idx=idx)
 
+        # Only for Events
         self.location = None
         if 'LimitedToArea' in self._data:
             iid = self._data['LimitedToArea']['Id']
@@ -400,44 +395,102 @@ class Event(BaseEvent):
                 log.warning("Could not find Location for %r: %d", self, iid)
                 self.location = Location(self._data['LimitedToArea'])
 
+        # Only for Events
         self.actions = []
         for i, item in enumerate(self._data.get('ChildBranches', [])):
             self.actions.append(Action(data=item, idx=i,
                                        qualities=qualities,
-                                       locations=locations))
+                                       parent=self))
 
+        # Only for Events and Actions
+        self.requirements = self._load_qualities(self._data.get('QualitiesRequired', []),
+                                                 qualities)
+
+        # Only for Actions
+        self.parent = parent
+
+        if 'ParentEvent' in self._data:
+            iid = self._data['ParentEvent']['Id']
+            # Sanity checks
+            if not parent:
+                log.warn("Event should %r have parent with ID %d", self, iid)
+            elif parent.id != iid:
+                log.warn("Parent ID in object and data don't match for %r: %d x %d",
+                         parent.id, iid)
+        elif parent:
+            # log.warn("%r should have parent ID in data: %r", self, parent)
+            pass
+
+        self.default_outcome = None
+        if 'DefaultEvent' in self._data:
+            self.default_outcome = Outcome(self._data['DefaultEvent'], 0,
+                                           qualities=qualities,
+                                           parent=self)
+
+        # Only for Outcomes
+        self.effects = self._load_qualities(self._data.get('QualitiesAffected', []),
+                                            qualities)
 
 
     def pretty(self, _level=0):
         pretty = super(Event, self).pretty(_level=_level)
         indent = _level * "\t"
+        dc=80
 
-        pretty += "\n{}\t{}".format(indent, self.description)
+        def desc(text, cut=80):
+            if len(text) > cut:
+                text = text[:cut] + "(...)"
+            for rep in (("\n", "\\n"),
+                        ("\r", "\\r")):
+                text = text.replace(*rep)
+            return text
+
+        if self.description:
+            pretty += "{}\t{}\n".format(indent, desc(self.description))
 
         if self.location:
-            pretty += "\n{}\tLocation: {}".format(indent,
+            pretty += "{}\tLocation: {}\n".format(indent,
                                                   self.location)
 
-        pretty += "\n{}\tRequirements: {:d}".format(indent,
-                                                    len(self.requirements))
-        for item in self.requirements:
-            pretty += "\n{}\t\t{}: {}".format(indent,
-                                              item[0].pretty(),
-                                              item[1])
+#         if self.parent:
+#             pretty += "{}\tParent: {}\n".format(indent, repr(self.parent))
+
+        if self.requirements:
+            pretty += "{}\tRequirements: {:d}\n".format(indent,
+                                                        len(self.requirements))
+            for item in self.requirements:
+                pretty += "{}\t\t{}: {}\n".format(indent,
+                                                  item[0],
+                                                  item[1])
 
         if self.actions:
-            pretty += "\n\n{}\tActions: {:d}".format(indent,
+            pretty += "\n{}\tActions: {:d}\n".format(indent,
                                                    len(self.actions))
             for item in self.actions:
-                pretty += "\n{}{}".format(indent,
-                                          item.pretty(_level=_level+2))
+                pretty += "{}{}\n".format(indent,
+                                        item.pretty(_level=_level+2))
 
-        return pretty + '\n'
+        if self.default_outcome:
+            pretty += "\n{}\tDefault outcome:\n{}".format(indent,
+                                                        self.default_outcome.pretty(_level=_level+2))
+
+        if self.effects:
+            pretty += "{}\tEffects: {}\n".format(indent, len(self.effects))
+            for item in self.effects:
+                pretty += "{}\t\t{}: {}\n".format(indent,
+                                                  item[0],
+                                                  item[1])
+
+        return pretty
 
 # Currently a subclass of Event, so it performs
 # When I'm confident about the structure and their differences
 # it can change to BaseEvent
 class Action(Event):
+    pass
+
+
+class Outcome(Event):
     pass
 
 
