@@ -408,7 +408,6 @@ class Event(BaseEvent):
 
         # Only for Actions
         self.parent = parent
-
         if 'ParentEvent' in self._data:
             iid = self._data['ParentEvent']['Id']
             # Sanity checks
@@ -421,13 +420,30 @@ class Event(BaseEvent):
             # log.warn("%r should have parent ID in data: %r", self, parent)
             pass
 
+        # Only for actions
         self.default_outcome = None
         if 'DefaultEvent' in self._data:
             self.default_outcome = Outcome(self._data['DefaultEvent'], 0,
                                            qualities=qualities,
                                            parent=self)
 
+        self.success_outcome_chance = 0
+        self.success_outcome = None
+        if 'SuccessEvent' in self._data:
+            self.success_outcome_chance = self._data.get('SuccessEventChance', 0)
+            self.success_outcome = Outcome(self._data['SuccessEvent'], 0,
+                                           qualities=qualities,
+                                           parent=self)
+        self.rare_outcome_chance = 0
+        self.rare_outcome = None
+        if 'RareDefaultEvent' in self._data:
+            self.rare_outcome_chance = self._data.get('RareDefaultEventChance', 0)
+            self.rare_outcome = Outcome(self._data['RareDefaultEvent'], 0,
+                                        qualities=qualities,
+                                        parent=self)
+
         # Only for Outcomes
+        self.trigger = self._data.get('LinkToEvent', {}).get('Id', None)
         self.effects = self._load_qualities(self._data.get('QualitiesAffected', []),
                                             qualities)
 
@@ -435,7 +451,6 @@ class Event(BaseEvent):
     def pretty(self, _level=0):
         pretty = super(Event, self).pretty(_level=_level)
         indent = _level * "\t"
-        dc=80
 
         def desc(text, cut=80):
             if len(text) > cut:
@@ -473,6 +488,15 @@ class Event(BaseEvent):
         if self.default_outcome:
             pretty += "\n{}\tDefault outcome:\n{}".format(indent,
                                                         self.default_outcome.pretty(_level=_level+2))
+
+        if self.success_outcome:
+            pretty += "\n{}\tSuccess outcome: {}\n{}".format(indent,
+                                                             self.success_outcome_chance,
+                                                             self.success_outcome.pretty(_level=_level+2))
+
+        if self.rare_outcome:
+            pretty += "\n{}\tRare outcome: {}%\n{}".format(indent, self.rare_outcome_chance,
+                                                        self.rare_outcome.pretty(_level=_level+2))
 
         if self.effects:
             pretty += "{}\tEffects: {}\n".format(indent, len(self.effects))
