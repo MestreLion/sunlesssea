@@ -211,9 +211,8 @@ class Entity(object):
     def dump(self):
         return self._data
 
-    def pretty(self, _level=0):
-        indent = _level * "\t"
-        pretty = "{}{:d}".format(indent, self.id)
+    def pretty(self):
+        pretty = "{:d}".format(self.id)
         if self.name:  pretty += " - {}".format(self.name)
         if self.image: pretty += " ({})".format(self.image)
         pretty += "\n"
@@ -228,6 +227,13 @@ class Entity(object):
             "| {{{{game icon|{image}}}}}\n"
             "| <nowiki>{description}</nowiki>\n",
             self)
+
+    def _desc(self, text, cut=80, elipsis="(...)"):
+        '''Quotes and limits a description, and replace control characters'''
+        if len(text) > cut:
+            text = text[:cut-len(elipsis)] + "(...)"
+        # repr() quotes and fixes \n, \r, but must get rid of 'u' prefix
+        return repr(text)[1:]
 
     def __repr__(self):
         if self.name:
@@ -366,11 +372,10 @@ class Location(Entity):
         super(Location, self).__init__(data=data, idx=idx)
         self.message     = self._data.get('MoveMessage', "")
 
-    def pretty(self, _level=0):
-        pretty = super(Location, self).pretty(_level=_level)
-        indent = _level * "\t"
+    def pretty(self):
+        pretty = super(Location, self).pretty()
         for attr in ('message', 'description'):
-            pretty += "{}\t{}\n\n".format(indent, getattr(self, attr))
+            pretty += "\t{}\n".format(self._desc(getattr(self, attr)))
         return pretty
 
 
@@ -435,35 +440,81 @@ class Requirement(QualityOperator):
 
 
 class BaseEvent(Entity):
-    '''Base class for Event, Action and Effect, as they have a very similar format'''
+    '''Base class for Event, Action and Effect, as they have a very similar format
+        Subclasses MUST override _INVALID_FIELDS
+    '''
 
     _OUTCOME_TYPES = ('DefaultEvent',
                      'RareDefaultEvent',
                      'SuccessEvent',
                      'RareSuccessEvent')
 
-    def _load_qualities(self, data, qualities):
-        requirements = []
-        for item in data:
-            iid = item['AssociatedQuality']['Id']
-            if qualities:
-                quality = qualities.get(iid)
+    _INVALID_FIELDS = ()
 
-            if not quality:
-                log.warning("Could not find Quality for %r: %d", self, iid)
-                quality = Quality(item['AssociatedQuality'])
+    def __init__(self, data, idx=0, parent=None, qualities=None):
+        super(BaseEvent, self).__init__(data=data, idx=idx)
 
-            requirements.append((quality,
-                                 {_:item[_] for _ in item
-                                  if _ not in self._REQ_DEFAULT}))
-        return requirements
+        assert self._INVALID_FIELDS, ("BaseEvent subclass without"
+                                      " _INVALID_FIELDS: {}".format(self))
+
+        # Requirements and Effects
+        for key, attr, cls in (
+            ('QualitiesRequired', 'requirements', Requirement),  # Only Events and Actions
+            ('QualitiesAffected', 'effects',      Effect),       # Only Events and Outcomes
+        ):
+            if key in self._data:
+                setattr(self, attr, [])
+                for item in self._data[key]:
+                    getattr(self, attr).append(cls(data=item,
+                                                   qualities=qualities,
+                                                   parent=self))
+
+        # Only Actions and Outcomes
+        if parent:
+            self.parent = parent
+
+        # Sanity checks
+
+        for item in self._INVALID_FIELDS:
+            if item in self._data and self._data[item]:
+                log.warn("Invalid field '%s' in %r", item, self)
+
+        if 'ParentEvent' in self._data:
+            iid = self._data['ParentEvent']['Id']
+            if not parent:
+                log.warn("%r should have parent with ID %d", self, iid)
+            elif parent.id != iid:
+                log.warn("Parent ID in object and data don't match for %r: %d vs %d",
+                         parent.id, iid)
+
+    def pretty(self):
+        pretty = "{}\n".format(super(BaseEvent, self).pretty().strip())
+
+        if self.description:
+            pretty += "\t{}\n".format(self._desc(self.description))
+
+        if getattr(self, 'requirements', None):
+            pretty += "\tRequirements: {:d}\n".format(len(self.requirements))
+            for item in self.requirements:
+                pretty += "{}\n".format(indent(item.pretty(), 2))
+
+        if getattr(self, 'effects', None):
+            pretty += "\tEffects: {:d}\n".format(len(self.effects))
+            for item in self.effects:
+                pretty += "{}\n".format(indent(item.pretty(), 2))
+
+        return pretty
 
 
 class Event(BaseEvent):
-    def __init__(self, data, idx=0, qualities=None, locations=None, parent=None, otype=None, chance=None):
-        super(Event, self).__init__(data=data, idx=idx)
+    '''"Root" events, such as Port Interactions'''
 
-        # Only for Events
+    _INVALID_FIELDS = ('ParentEvent',
+                       'LinkToEvent')
+
+    def __init__(self, data, idx=0, qualities=None, locations=None):
+        super(Event, self).__init__(data=data, idx=idx, qualities=qualities)
+
         self.location = None
         if 'LimitedToArea' in self._data:
             iid = self._data['LimitedToArea']['Id']
@@ -474,53 +525,34 @@ class Event(BaseEvent):
                 log.warning("Could not find Location for %r: %d", self, iid)
                 self.location = Location(self._data['LimitedToArea'])
 
-        # Only for Events
         self.actions = []
         for i, item in enumerate(self._data.get('ChildBranches', [])):
             self.actions.append(Action(data=item, idx=i,
                                        qualities=qualities,
                                        parent=self))
 
-        # Only for Events and Actions
-        self.requirements = []
-        for item in self._data.get('QualitiesRequired', []):
-            self.requirements.append(Requirement(data=item,
-                                                 qualities=qualities,
-                                                 parent=self))
+    def pretty(self):
+        pretty = super(Event, self).pretty()
 
-        # Only for Actions
-        self.parent = parent
-        if 'ParentEvent' in self._data:
-            iid = self._data['ParentEvent']['Id']
-            # Sanity checks
-            if not parent:
-                log.warn("Event should %r have parent with ID %d", self, iid)
-            elif parent.id != iid:
-                log.warn("Parent ID in object and data don't match for %r: %d x %d",
-                         parent.id, iid)
-        elif parent:
-            # log.warn("%r should have parent ID in data: %r", self, parent)
-            pass
+        if self.location:
+            pretty += "\tLocation: {}\n".format(self.location)
 
-        # Only for actions
-        self.default_outcome = None
-        if 'DefaultEvent' in self._data:
-            self.default_outcome = Outcome(self._data['DefaultEvent'], 0,
-                                           qualities=qualities,
-                                           parent=self)
+        if self.actions:
+            pretty += "\n\tActions: {:d}".format(len(self.actions))
+            for item in self.actions:
+                pretty += "\n{}\n".format(indent(item.pretty(), 2))
 
-        self.success_outcome = None
-        if 'SuccessEvent' in self._data:
-            self.success_outcome = Outcome(self._data['SuccessEvent'], 0,
-                                           qualities=qualities,
-                                           parent=self)
-        self.rare_outcome_chance = 0
-        self.rare_outcome = None
-        if 'RareDefaultEvent' in self._data:
-            self.rare_outcome_chance = self._data['RareDefaultEventChance']
-            self.rare_outcome = Outcome(self._data['RareDefaultEvent'], 0,
-                                        qualities=qualities,
-                                        parent=self)
+        return pretty
+
+
+class Action(BaseEvent):
+    _INVALID_FIELDS = ('LimitedToArea',
+                       'ChildBranches',
+                       'LinkToEvent',
+                       'QualitiesAffected')
+
+    def __init__(self, data, idx=0, qualities=None, parent=None):
+        super(Action, self).__init__(data=data, idx=idx, qualities=qualities, parent=parent)
 
         self.outcomes = []
         for item in self._OUTCOME_TYPES:
@@ -532,74 +564,38 @@ class Event(BaseEvent):
                                              otype=item,
                                              chance=i))
 
-        # Only for Outcomes
-        self.type = otype
-        self.chance = chance
-        self.trigger = self._data.get('LinkToEvent', {}).get('Id', None)
-        self.effects = []
-        for item in self._data.get('QualitiesAffected', []):
-            self.effects.append(Effect(data=item,
-                                       qualities=qualities,
-                                       parent=self))
-
-
-    def pretty(self, _level=0):
-        pretty = super(Event, self).pretty(_level=_level)
-        indent = _level * "\t"
-
-        def desc(text, cut=80, elipsis="(...)"):
-            if len(text) > cut:
-                text = text[:cut-len(elipsis)] + "(...)"
-            # repr() fixes \n, \r and other stuff. Quote for free1
-            return repr(text)[1:]  # ...but get rid of the 'u' prefix
-
-        if self.description:
-            pretty += "{}\t{}\n".format(indent, desc(self.description))
-
-        if self.location:
-            pretty += "{}\tLocation: {}\n".format(indent,
-                                                  self.location)
-
-        if self.requirements:
-            pretty += "{}\tRequirements: {:d}\n".format(indent,
-                                                        len(self.requirements))
-            for item in self.requirements:
-                pretty += "{}\n".format(item.pretty(_level=_level+2))
-
-        if self.actions:
-            pretty += "\n{}\tActions: {:d}\n".format(indent,
-                                                   len(self.actions))
-            for item in self.actions:
-                pretty += "{}{}\n".format(indent,
-                                        item.pretty(_level=_level+2))
+    def pretty(self):
+        pretty = super(Action, self).pretty()
 
         for item in self.outcomes:
-            pretty += "\n{}\t{}{}:\n".format(indent,
-                                             item.type,
-                                             " {}%".format(item.chance)
-                                                if item.chance
-                                                else "")
-            pretty += item.pretty(_level=_level+2)
-
-        if self.effects:
-            pretty += "{}\tEffects: {}\n".format(indent, len(self.effects))
-            for item in self.effects:
-                pretty += "{}\n".format(item.pretty(_level=_level+2))
-
-        if self.trigger:
-            pretty += "{}\tTrigger event: {}\n".format(indent, self.trigger)
+            pretty += "\n\t{}{}:\n".format(item.type,
+                                         " {}%".format(item.chance)
+                                            if item.chance
+                                            else "")
+            pretty += indent(item.pretty(), 2)
 
         return pretty
 
-# Currently a subclass of Event, so it performs
-# When I'm confident about the structure and their differences
-# it can change to BaseEvent
-class Action(Event):
-    pass
 
+class Outcome(BaseEvent):
+    _INVALID_FIELDS = ('LimitedToArea',
+                       'ChildBranches',
+                       'QualitiesRequired')
 
-class Outcome(Event):
-    pass
+    def __init__(self, data, idx=0, qualities=None, parent=None, otype=None, chance=None):
+        super(Outcome, self).__init__(data=data, idx=idx, qualities=qualities, parent=parent)
+
+        self.type    = otype
+        self.chance  = chance
+        self.trigger = self._data.get('LinkToEvent', {}).get('Id', None)
+
+    def pretty(self):
+        pretty = super(Outcome, self).pretty()
+
+        if self.trigger:
+            pretty += "\tTrigger event: {}\n".format(self.trigger)
+
+        return pretty
 
 
 class Events(Entities):
