@@ -319,6 +319,12 @@ class Quality(Entity):
         'UsePyramidNumbers',
     ))
 
+    _status_fields = (
+        ('level_status',  'LevelDescriptionText', 'Journal Descriptions'),
+        ('change_status', 'ChangeDescriptionText', 'Change Descriptions'),
+        ('image_status',  'LevelImageText', 'Images'),
+    )
+
     def __init__(self, data, idx=0):
         super(Quality, self).__init__(data=data, idx=idx)
         for attr, atype, default in (
@@ -333,9 +339,7 @@ class Quality(Entity):
         ):
             setattr(self, attr.lower(), atype(self._data.get(attr, default)))
 
-        for attr, key in (('level_status',  'LevelDescriptionText'),
-                          ('change_status', 'ChangeDescriptionText'),
-                          ('image_status',  'LevelImageText')):
+        for attr, key, _ in self._status_fields:
             setattr(self, attr, self._parse_status(self._data.get(key, "")))
 
     def _parse_status(self, value):
@@ -343,21 +347,18 @@ class Quality(Entity):
             return {}
         return {int(k):v for k,v in (row.split("|") for row in value.split("~"))}
 
-    def pretty(self, _level=0):
-        pretty = super(Quality, self).pretty(_level=_level)
-        indent = _level * "\t"
+    def pretty(self):
+        pretty = super(Quality, self).pretty()
 
-        for attr, caption in (('level_status',  'Journal Descriptions'),
-                              ('change_status', 'Change Descriptions'),
-                              ('image_status',  'Images')):
+        if self.description:
+            pretty += "\t{}\n".format(self._desc(self.description))
+
+        for attr, _, caption in self._status_fields:
             statuses = getattr(self, attr)
             if statuses:
-                pretty += "{}\t{}: {:d}\n".format(indent,
-                                                  caption,
-                                                  len(statuses))
+                pretty += "\n\t{}: {:d}\n".format(caption, len(statuses))
                 for status in sorted(statuses.iteritems()):
-                    pretty += "{}\t\t[{}] - {}\n".format(indent,
-                                                         *status)
+                    pretty += "\t\t[{}] - {}\n".format(*status)
 
         return pretty
 
@@ -629,7 +630,7 @@ class Entities(object):
         return "\n".join((_.pretty() for _ in self))
 
     def show(self):
-        return "\n".join((str(_) for _ in self))
+        return "\n".join((unicode(_) for _ in self))
 
     def get(self, eid, default=None):
         '''Get entity by ID'''
