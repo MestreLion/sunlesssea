@@ -123,7 +123,7 @@ def parse_args(argv=None):
 
     parser.add_argument('-f', '--format',
                         dest='format',
-                        choices=('bare', 'pretty', 'wiki'),
+                        choices=('bare', 'dump', 'pretty', 'wiki'),
                         default='pretty',
                         help="Output format. 'wiki' is awesome!"
                             " Available formats: [%(choices)s]."
@@ -167,6 +167,8 @@ def main(argv=None):
             safeprint(entities.wikitable())
         elif args.format == 'pretty':
             safeprint(entities.pretty())
+        elif args.format == 'dump':
+            safeprint(entities.dump())
         else:
             safeprint(entities.show())
         return
@@ -197,7 +199,16 @@ def main(argv=None):
 
 
 class Entity(object):
-    '''Base class for an Entity'''
+    '''Base class for an Entity
+        Subclasses SHOULD override _REQUIRED_FIELDS, _OPTIONAL_FIELDS, _IGNORED_FIELDS
+    '''
+
+    _ENTITY_FIELDS    = set(("Id", "Name", "Description", "Image"))
+    _ENTITY_REQUIRED  = set(("Id",))
+
+    _REQUIRED_FIELDS  = set(_ENTITY_FIELDS)
+    _OPTIONAL_FIELDS  = set()  # Converted to attributes using default values
+    _IGNORED_FIELDS   = set()  # No attributes created
 
     def __init__(self, data, idx=0):
         self._data = data
@@ -207,7 +218,27 @@ class Entity(object):
         self.name        = self._data.get('Name', "")
         self.description = self._data.get('Description', "")
         self.image       = (self._data.get('Image', None) or
-                            self._data.get('ImageName', ""))
+                            self._data.get('ImageName', ""))  # Locations
+
+        self._test_integrity()
+
+    def _test_integrity(self):
+        fields = set(self._data)
+
+        f = ((self._ENTITY_REQUIRED |
+              self._REQUIRED_FIELDS) -
+             fields)
+        if f:
+            log.error("%r is missing REQUIRED fields: %s",
+                      self, ", ".join(sorted(f)))
+
+        f = fields - (self._ENTITY_REQUIRED |
+                      self._REQUIRED_FIELDS |
+                      self._OPTIONAL_FIELDS |
+                      self._IGNORED_FIELDS)
+        if f:
+            log.warn("%r contains UNKNOWN fields: %s",
+                      self, ", ".join(sorted(f)))
 
     def dump(self):
         return self._data
@@ -253,18 +284,54 @@ class Entity(object):
 
 
 class Quality(Entity):
-    _jsonattrs = {"Category",
-                  "LevelDescriptionText",
-                  "ChangeDescriptionText",
-                  "LevelImageText",  # Pure evil
-                  "Nature",
-                  "Tag",
-                  }
+    _REQUIRED_FIELDS = {'Name'}
+    _OPTIONAL_FIELDS = set((
+        "Description",
+        "Image",
+
+        "ChangeDescriptionText",
+        "LevelDescriptionText",
+        'LevelImageText',
+
+        "AvailableAt",
+        "Cap",
+        "Category",
+        "IsSlot",
+        "Nature",
+        "Persistent",
+        "Tag",
+        'Visible',
+    ))
+    _IGNORED_FIELDS  = set((
+        'AllowedOn',
+        'AssignToSlot',
+        'CssClasses',
+        'DifficultyScaler',
+        "DifficultyTestType",
+        'Enhancements',
+        'Notes',
+        "Ordering",
+        'OwnerName',
+        'PyramidNumberIncreaseLimit',
+        'QEffectPriority',
+        'QualitiesPossessedList',
+        'UseEvent',
+        'UsePyramidNumbers',
+    ))
 
     def __init__(self, data, idx=0):
         super(Quality, self).__init__(data=data, idx=idx)
-        for attr in self._jsonattrs:
-            setattr(self, attr.lower(), self._data.get(attr, ""))
+        for attr, atype, default in (
+            ("AvailableAt", str,  ""),
+            ("Cap",         int,  0),
+            ("Category",    int,  0),
+            ("IsSlot",      bool, False),
+            ("Nature",      int,  0),
+            ("Persistent",  bool, False),
+            ("Tag",         str,  ""),
+            ("Visible",     bool, False),
+        ):
+            setattr(self, attr.lower(), atype(self._data.get(attr, default)))
 
         for attr, key in (('level_status',  'LevelDescriptionText'),
                           ('change_status', 'ChangeDescriptionText'),
@@ -296,6 +363,9 @@ class Quality(Entity):
 
 
 class Location(Entity):
+    _REQUIRED_FIELDS = set(('Name',))
+    _OPTIONAL_FIELDS = set(('Description', 'ImageName', 'MoveMessage'))
+
     def __init__(self, data, idx=0):
         super(Location, self).__init__(data=data, idx=idx)
         self.message     = self._data.get('MoveMessage', "")
@@ -308,22 +378,21 @@ class Location(Entity):
 
 
 class BaseEvent(Entity):
-    '''Base class for Event, Action and Effect, as they have a very similar format
-        Subclasses MUST override _INVALID_FIELDS
-    '''
+    '''Base class for Event, Action and Effect, as they have a very similar format'''
 
     _OUTCOME_TYPES = ('DefaultEvent',
                      'RareDefaultEvent',
                      'SuccessEvent',
                      'RareSuccessEvent')
 
-    _INVALID_FIELDS = ()
+    _OPTIONAL_FIELDS = set((
+        "Name",
+        "Description",
+        "Image",
+    ))
 
     def __init__(self, data, idx=0, parent=None, qualities=None):
         super(BaseEvent, self).__init__(data=data, idx=idx)
-
-        assert self._INVALID_FIELDS, ("BaseEvent subclass without"
-                                      " _INVALID_FIELDS: {}".format(self))
 
         # Requirements and Effects
         for key, attr, cls in (
@@ -342,10 +411,6 @@ class BaseEvent(Entity):
             self.parent = parent
 
         # Sanity checks
-
-        for item in self._INVALID_FIELDS:
-            if item in self._data and self._data[item]:
-                log.warn("Invalid field '%s' in %r", item, self)
 
         if 'ParentEvent' in self._data:
             iid = self._data['ParentEvent']['Id']
@@ -377,11 +442,33 @@ class BaseEvent(Entity):
 class Event(BaseEvent):
     '''"Root" events, such as Port Interactions'''
 
-    _INVALID_FIELDS = ('ParentEvent',
-                       'LinkToEvent')
+    _REQUIRED_FIELDS = set((
+        "ChildBranches",
+        'QualitiesRequired'
+    ))
+    _OPTIONAL_FIELDS = BaseEvent._OPTIONAL_FIELDS | set((
+        "Autofire",
+        'LimitedToArea',
+        'QualitiesAffected'
+    ))
+    _IGNORED_FIELDS  = set((
+        'CanGoBack',
+        'Category',
+        'ChallengeLevel',
+        "Deck",
+        "Distribution",
+        'ExoticEffects',
+        "Ordering",
+        "Setting",
+        "Stickiness",
+        'Transient',
+        "Urgency",
+    ))
 
     def __init__(self, data, idx=0, qualities=None, locations=None):
         super(Event, self).__init__(data=data, idx=idx, qualities=qualities)
+
+        self.autofire = self._data.get("Autofire", False)
 
         self.location = None
         if 'LimitedToArea' in self._data:
@@ -414,6 +501,21 @@ class Event(BaseEvent):
 
 
 class Action(BaseEvent):
+    _REQUIRED_FIELDS = set((
+        "QualitiesRequired",
+        'ParentEvent'
+    ))
+    _OPTIONAL_FIELDS = (
+        set(BaseEvent._OPTIONAL_FIELDS) |
+        set(BaseEvent._OUTCOME_TYPES)   |
+        set(_+"Chance" for _ in BaseEvent._OUTCOME_TYPES)
+    )
+    _IGNORED_FIELDS = set((
+        'ActionCost',
+        'ButtonText',
+        "Ordering",
+    ))
+
     _INVALID_FIELDS = ('LimitedToArea',
                        'ChildBranches',
                        'LinkToEvent',
@@ -433,22 +535,33 @@ class Action(BaseEvent):
                                              chance=i))
 
     def pretty(self):
-        pretty = super(Action, self).pretty()
+        pretty = super(Action, self).pretty().strip()
 
         for item in self.outcomes:
-            pretty += "\n\t{}{}:\n".format(item.type,
-                                         " {}%".format(item.chance)
-                                            if item.chance
-                                            else "")
-            pretty += indent(item.pretty(), 2)
+            pretty += "\n\n{}".format(indent(item.pretty(), 1))
 
         return pretty
 
 
 class Outcome(BaseEvent):
-    _INVALID_FIELDS = ('LimitedToArea',
-                       'ChildBranches',
-                       'QualitiesRequired')
+    _REQUIRED_FIELDS = set()
+    _OPTIONAL_FIELDS = BaseEvent._OPTIONAL_FIELDS | set((
+        "QualitiesAffected",
+        "LinkToEvent",
+    ))
+    _IGNORED_FIELDS  = set((
+        'Category',
+        'ExoticEffects',
+        'MoveToArea',
+        "Urgency",
+        "SwitchToSetting",
+        "SwitchToSettingId",
+    ))
+
+    _INVALID_FIELDS = set(('LimitedToArea',
+                           'ChildBranches',
+                           'QualitiesRequired',
+                           'Image'))
 
     def __init__(self, data, idx=0, qualities=None, parent=None, otype=None, chance=None):
         super(Outcome, self).__init__(data=data, idx=idx, qualities=qualities, parent=parent)
@@ -458,10 +571,13 @@ class Outcome(BaseEvent):
         self.trigger = self._data.get('LinkToEvent', {}).get('Id', None)
 
     def pretty(self):
-        pretty = super(Outcome, self).pretty()
+        pretty = "{}{}:\n{}\n".format(self.type,
+                                      " {}%".format(self.chance)
+                                            if self.chance else "",
+                                      indent(super(Outcome, self).pretty(), 1))
 
         if self.trigger:
-            pretty += "\tTrigger event: {}\n".format(self.trigger)
+            pretty += "\t\tTrigger event: {}\n".format(self.trigger)
 
         return pretty
 
@@ -505,6 +621,9 @@ class Entities(object):
         table += "".join((_.wikirow() for _ in self))
         table += '|-\n|}'
         return table
+
+    def dump(self):
+        return "\n".join((_.dump() for _ in self))
 
     def pretty(self):
         return "\n".join((_.pretty() for _ in self))
