@@ -21,6 +21,20 @@
     Tools for Sunless Sea data dumps
 """
 
+# Ideas
+# - pretty(short=True), so they can use each other
+#    Ex: Location.pretty(short=True) does not print description
+# - just the caller indents the result, using indent() - no more _level madness!
+# - make pretty uniform across indent, \n, etc
+# - Outcomes are a dict: only Default, Success, Rare.
+#    4 keys: DefaultEvent, RareDefaultEvent, SuccessEvent, RareSuccessEvent
+#    Possible combinations:
+#        Def+RarDef
+#        Def(Fail)+RarDef(SuperFail)+Suc
+#        Def(Fail)+Suc
+#        Def(Fail)+Suc+RarSuc(SuperSuc)
+
+
 from __future__ import unicode_literals, print_function
 
 
@@ -72,6 +86,12 @@ def format_obj(fmt, obj, *args, **kwargs):
     return unicode(fmt).format(*args, **objdict)
 
 
+def indent(text, level=1, pad='\t'):
+    '''Indent a text. As a side-effect it also rstrips (right-trim) whitespaces'''
+    if not level:
+        return text
+    indent = level * pad
+    return "{}{}".format(indent, ('\n'+indent).join(text.rstrip().split('\n')))
 
 
 ####################################################################################
@@ -358,10 +378,69 @@ class Locations(Entities):
     EntityCls=Location
 
 
+class QualityOperator(object):
+    '''Base Class for Effects and Requirements'''
+
+    _NOT_OP  = ('AssociatedQuality', 'Id')
+    _HIDE_OP = ('VisibleWhenRequirementFailed', 'BranchVisibleWhenRequirementFailed')
+
+    def __init__(self, data, qualities=None, parent=None):
+        self.id       = data['Id']
+        self.parent   = parent
+        self.quality  = None
+        self.operator = {_:data[_] for _ in data
+                         if _ not in self._NOT_OP}
+
+        qid = data['AssociatedQuality']['Id']
+        if qualities:
+            self.quality = qualities.get(qid)
+
+        if not self.quality:
+            # Create a dummy one
+            self.quality = Quality(data['AssociatedQuality'])
+            log.warning("Could not find Quality for %r: %d",
+                        parent, qid)
+
+    def _format_ops(self, ops):
+        '''dict {'MaxLevel': 2, 'MinLevel': 1} => string "MaxLevel: 2, MinLevel: 1"'''
+        return ", ".join(": ".join((k, str(v)))
+                         for k,v in ops.iteritems()
+                         if k not in self._HIDE_OP)
+
+    def __str__(self):
+        return "{quality} ({operator})".format(
+            quality=self.quality,
+            operator=self._format_ops(self.operator))
+
+    def __repr__(self):
+        return "<{cls} {id}: {qid} - {qname} [{ops}]>".format(
+            cls   = self.__class__.__name__,
+            id    = self.id,
+            qid   = self.quality.id,
+            qname = self.quality.name,
+            ops   = self._format_ops(self.operator))
+
+    def pretty(self, _level=0):
+        return indent("{} [{}]".format(self.quality,
+                                        self._format_ops(self.operator)),
+                      _level)
+
+
+class Effect(QualityOperator):
+    pass
+
+
+class Requirement(QualityOperator):
+    pass
+
+
 class BaseEvent(Entity):
     '''Base class for Event, Action and Effect, as they have a very similar format'''
 
-    _REQ_DEFAULT = ('AssociatedQuality', 'Id')
+    _OUTCOME_TYPES = ('DefaultEvent',
+                     'RareDefaultEvent',
+                     'SuccessEvent',
+                     'RareSuccessEvent')
 
     def _load_qualities(self, data, qualities):
         requirements = []
@@ -381,7 +460,7 @@ class BaseEvent(Entity):
 
 
 class Event(BaseEvent):
-    def __init__(self, data, idx=0, qualities=None, locations=None, parent=None):
+    def __init__(self, data, idx=0, qualities=None, locations=None, parent=None, otype=None, chance=None):
         super(Event, self).__init__(data=data, idx=idx)
 
         # Only for Events
@@ -403,8 +482,11 @@ class Event(BaseEvent):
                                        parent=self))
 
         # Only for Events and Actions
-        self.requirements = self._load_qualities(self._data.get('QualitiesRequired', []),
-                                                 qualities)
+        self.requirements = []
+        for item in self._data.get('QualitiesRequired', []):
+            self.requirements.append(Requirement(data=item,
+                                                 qualities=qualities,
+                                                 parent=self))
 
         # Only for Actions
         self.parent = parent
@@ -427,38 +509,49 @@ class Event(BaseEvent):
                                            qualities=qualities,
                                            parent=self)
 
-        self.success_outcome_chance = 0
         self.success_outcome = None
         if 'SuccessEvent' in self._data:
-            self.success_outcome_chance = self._data.get('SuccessEventChance', 0)
             self.success_outcome = Outcome(self._data['SuccessEvent'], 0,
                                            qualities=qualities,
                                            parent=self)
         self.rare_outcome_chance = 0
         self.rare_outcome = None
         if 'RareDefaultEvent' in self._data:
-            self.rare_outcome_chance = self._data.get('RareDefaultEventChance', 0)
+            self.rare_outcome_chance = self._data['RareDefaultEventChance']
             self.rare_outcome = Outcome(self._data['RareDefaultEvent'], 0,
                                         qualities=qualities,
                                         parent=self)
 
+        self.outcomes = []
+        for item in self._OUTCOME_TYPES:
+            if item in self._data:
+                i = self._data.get(item + 'Chance', None)
+                self.outcomes.append(Outcome(data=self._data[item],
+                                             qualities=qualities,
+                                             parent=self,
+                                             otype=item,
+                                             chance=i))
+
         # Only for Outcomes
+        self.type = otype
+        self.chance = chance
         self.trigger = self._data.get('LinkToEvent', {}).get('Id', None)
-        self.effects = self._load_qualities(self._data.get('QualitiesAffected', []),
-                                            qualities)
+        self.effects = []
+        for item in self._data.get('QualitiesAffected', []):
+            self.effects.append(Effect(data=item,
+                                       qualities=qualities,
+                                       parent=self))
 
 
     def pretty(self, _level=0):
         pretty = super(Event, self).pretty(_level=_level)
         indent = _level * "\t"
 
-        def desc(text, cut=80):
+        def desc(text, cut=80, elipsis="(...)"):
             if len(text) > cut:
-                text = text[:cut] + "(...)"
-            for rep in (("\n", "\\n"),
-                        ("\r", "\\r")):
-                text = text.replace(*rep)
-            return text
+                text = text[:cut-len(elipsis)] + "(...)"
+            # repr() fixes \n, \r and other stuff. Quote for free1
+            return repr(text)[1:]  # ...but get rid of the 'u' prefix
 
         if self.description:
             pretty += "{}\t{}\n".format(indent, desc(self.description))
@@ -467,16 +560,11 @@ class Event(BaseEvent):
             pretty += "{}\tLocation: {}\n".format(indent,
                                                   self.location)
 
-#         if self.parent:
-#             pretty += "{}\tParent: {}\n".format(indent, repr(self.parent))
-
         if self.requirements:
             pretty += "{}\tRequirements: {:d}\n".format(indent,
                                                         len(self.requirements))
             for item in self.requirements:
-                pretty += "{}\t\t{}: {}\n".format(indent,
-                                                  item[0],
-                                                  item[1])
+                pretty += "{}\n".format(item.pretty(_level=_level+2))
 
         if self.actions:
             pretty += "\n{}\tActions: {:d}\n".format(indent,
@@ -485,25 +573,21 @@ class Event(BaseEvent):
                 pretty += "{}{}\n".format(indent,
                                         item.pretty(_level=_level+2))
 
-        if self.default_outcome:
-            pretty += "\n{}\tDefault outcome:\n{}".format(indent,
-                                                        self.default_outcome.pretty(_level=_level+2))
-
-        if self.success_outcome:
-            pretty += "\n{}\tSuccess outcome: {}\n{}".format(indent,
-                                                             self.success_outcome_chance,
-                                                             self.success_outcome.pretty(_level=_level+2))
-
-        if self.rare_outcome:
-            pretty += "\n{}\tRare outcome: {}%\n{}".format(indent, self.rare_outcome_chance,
-                                                        self.rare_outcome.pretty(_level=_level+2))
+        for item in self.outcomes:
+            pretty += "\n{}\t{}{}:\n".format(indent,
+                                             item.type,
+                                             " {}%".format(item.chance)
+                                                if item.chance
+                                                else "")
+            pretty += item.pretty(_level=_level+2)
 
         if self.effects:
             pretty += "{}\tEffects: {}\n".format(indent, len(self.effects))
             for item in self.effects:
-                pretty += "{}\t\t{}: {}\n".format(indent,
-                                                  item[0],
-                                                  item[1])
+                pretty += "{}\n".format(item.pretty(_level=_level+2))
+
+        if self.trigger:
+            pretty += "{}\tTrigger event: {}\n".format(indent, self.trigger)
 
         return pretty
 
