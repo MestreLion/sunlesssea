@@ -190,7 +190,7 @@ def main(argv=None):
 
     # Testing area..
     event = ss.events.get(208079)
-    safeprint(event.pretty())
+    safeprint(event.wikipage())
 
 
 
@@ -249,6 +249,9 @@ class Entity(object):
         if self.image: pretty += " ({})".format(self.image)
         pretty += "\n"
         return pretty
+
+    def wiki(self):
+        return self.name or str(self.id)
 
     def wikirow(self):
         return format_obj(
@@ -449,12 +452,12 @@ class Event(BaseEvent):
     ))
     _OPTIONAL_FIELDS = BaseEvent._OPTIONAL_FIELDS | set((
         "Autofire",
+        'Category',
         'LimitedToArea',
         'QualitiesAffected'
     ))
     _IGNORED_FIELDS  = set((
         'CanGoBack',
-        'Category',
         'ChallengeLevel',
         "Deck",
         "Distribution",
@@ -470,6 +473,7 @@ class Event(BaseEvent):
         super(Event, self).__init__(data=data, idx=idx, qualities=qualities)
 
         self.autofire = self._data.get("Autofire", False)
+        self.category = self._data.get("Category", 0)
 
         self.location = None
         if 'LimitedToArea' in self._data:
@@ -482,7 +486,7 @@ class Event(BaseEvent):
                 self.location = Location(self._data['LimitedToArea'])
 
         self.actions = []
-        for i, item in enumerate(self._data.get('ChildBranches', [])):
+        for i, item in enumerate(self._data.get('ChildBranches', []), 1):
             self.actions.append(Action(data=item, idx=i,
                                        qualities=qualities,
                                        parent=self))
@@ -499,6 +503,40 @@ class Event(BaseEvent):
                 pretty += "\n{}\n".format(indent(item.pretty(), 2))
 
         return pretty
+
+    def wikipage(self):
+        page = format_obj(
+            '{{{{Infobox story\n'
+            '|name         = {{{{PAGENAME}}}}\n'
+            '|image        = {{{{PAGEIMAGE}}}}\n'
+            '|id           = {id}\n'
+            '|px           = 260px\n'
+#            '|category     = [[Story Event]]'
+#            '|type         = [[Story Event#Pigmote Isle|Pigmote Isle]]'
+            '|linked       = {{{{link icon|{location}}}}}\n'
+            '}}}}\n'
+            '\n\n'
+            '==Trigger Conditions==\n'
+            , self,
+            location=self.location.name if self.location else "",
+        )
+        for item in self.requirements:
+            page += '* {}\n'.format(item.wiki())
+
+        page += (
+            '\n\n'
+            '==Interactions==\n'
+            '{| class="ss-table sortable" style="width: 100%;"\n'
+            '! style="width:10%;" | Interaction\n'
+            '! style="width:20%;" | Unlocked by\n'
+            '! style="width:20%;" | Effects\n'
+            '! style="width:10%;" | Notes\n'
+            '\n'
+        )
+        page += "\n".join((_.wikirow() for _ in self.actions))
+        page += '\n|-\n|}'
+
+        return page
 
 
 class Action(BaseEvent):
@@ -534,6 +572,20 @@ class Action(BaseEvent):
                                              parent=self,
                                              otype=item,
                                              chance=i))
+        # Integrity checks
+        if not self.outcomes:
+            log.warn("%r has no outcomes!", self)
+        elif self.outcomes[0].type != self._OUTCOME_TYPES[0]:
+            log.warn("%r first outcome is not '%s': '%s'",
+                     self, self._OUTCOME_TYPES[0], self.outcomes[0].type)
+
+    @property
+    def gamenote(self):
+        note = re.search(r'\[([^\]]*)\]', self.description)
+        if note:
+            return note.groups()[0]
+        return ""
+
 
     def pretty(self):
         pretty = super(Action, self).pretty().strip()
@@ -542,6 +594,23 @@ class Action(BaseEvent):
             pretty += "\n\n{}".format(indent(item.pretty(), 1))
 
         return pretty
+
+    def wikirow(self):
+        note = self.gamenote
+        return '''|-
+            | {name}
+            |
+            <ul>
+            {reqs}
+            </ul>
+            |{outs}
+            |{note}
+        '''.replace(4 * " ", "").format(
+            name=self.name,
+            reqs="<br>\n".join(_.wiki() for _ in self.requirements) if self.requirements else "-",
+            outs="<br>\n".join(_.wiki() for _ in self.outcomes) if self.outcomes else "-",
+            note=" {{{{game note|{}}}}}".format(note) if note else ""
+        )
 
 
 class Outcome(BaseEvent):
@@ -571,6 +640,22 @@ class Outcome(BaseEvent):
         self.chance  = chance
         self.trigger = self._data.get('LinkToEvent', {}).get('Id', None)
 
+    @property
+    def label(self):
+        i = len(self.parent.outcomes)
+        if i == 1:
+            return ""
+        else:
+            return self.type
+#         _OUTCOME_TYPES = ('DefaultEvent',
+#                          'RareDefaultEvent',
+#                          'SuccessEvent',
+#                          'RareSuccessEvent')
+#        Def+RarDef
+#        Def(Fail)+RarDef(SuperFail)+Suc
+#        Def(Fail)+Suc
+#        Def(Fail)+Suc+RarSuc(SuperSuc)
+
     def pretty(self):
         pretty = "{}{}:\n{}\n".format(self.type,
                                       " {}%".format(self.chance)
@@ -581,6 +666,28 @@ class Outcome(BaseEvent):
             pretty += "\t\tTrigger event: {}\n".format(self.trigger)
 
         return pretty
+
+    def wiki(self):
+        def wikilabel(text):
+            pass
+
+        i = len(self.parent.outcomes)
+        return '''{name}
+            <ul>
+            {effects}{sep}{trigger}
+            </ul>'''.replace(4 * " ", "").format(
+            name    = " {{{{effect title|{}}}}}".format(self.name) if self.name else "",
+            effects = "<br>\n".join(_.wiki() for _ in self.effects),
+            sep     = "<br>\n" if (self.effects and self.trigger) else "",
+            trigger = ("{{{{trigger event|{}}}}}".format(self.trigger)
+                       if self.trigger and self.trigger != self.parent.parent.id
+                       else ""),
+        )
+        if i == 1:
+            return wikilabel(self.name)
+        else:
+            pass
+        return self.name
 
 
 class Entities(object):
@@ -682,6 +789,17 @@ class QualityOperator(object):
     _NOT_OP  = ('AssociatedQuality', 'Id')
     _HIDE_OP = ('VisibleWhenRequirementFailed', 'BranchVisibleWhenRequirementFailed')
 
+    _STR_OP  = dict(
+        MinLevel          = '≥',
+        MaxLevel          = '≤',
+        Level             = '+',
+        SetToExactly      = '=',
+        OnlyIfNoMoreThan  = 'if ≤',
+        OnlyIfAtLeast     = 'if ≥',
+    )
+
+    _reverse = ('Terror', 'Hunger', 'Menaces: Wounds')
+
     def __init__(self, data, qualities=None, parent=None):
         self.id       = data['Id']
         self.parent   = parent
@@ -699,11 +817,26 @@ class QualityOperator(object):
             log.warning("Could not find Quality for %r: %d",
                         parent, qid)
 
-    def _format_ops(self, ops):
+    def _format_ops(self, ops, sep_op=" and ", sep_pair=" ", hidelist=None):
         '''dict {'MaxLevel': 2, 'MinLevel': 1} => string "MaxLevel: 2, MinLevel: 1"'''
-        return ", ".join(": ".join((k, str(v)))
+        return sep_op.join(sep_pair.join((self._STR_OP.get(k, k), str(v)))
                          for k,v in ops.iteritems()
-                         if k not in self._HIDE_OP)
+                         if k not in self._HIDE_OP+tuple(hidelist or ()))
+
+    def wiki(self):
+        if 'Level' in self.operator:
+            return '{{{{link qty|{level:+d}|{name}{rev}}}}}{sep}{ops}'.format(
+                name=self.quality.name,
+                rev="||-" if self.quality.name in self._reverse else "",
+                level=self.operator['Level'],
+                sep=", " if len(self.operator) > 1 else "",
+                ops=self._format_ops(self.operator, hidelist=['Level']),
+            )
+        else:
+            return '{{{{link icon|{name}}}}} {ops}'.format(
+                name=self.quality.name,
+                ops=self._format_ops(self.operator)
+            )
 
     def __str__(self):
         return "{quality} ({operator})".format(
