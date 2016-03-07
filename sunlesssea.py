@@ -97,6 +97,7 @@ def indent(text, level=1, pad='\t'):
 ####################################################################################
 # Main() and helpers
 
+
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description=__doc__)
@@ -251,75 +252,6 @@ class Entity(object):
             return str(self.id)
 
 
-class Entities(object):
-    '''Base class for entity containers. Subclasses SHOULD override EntityCls!'''
-    EntityCls=Entity
-
-    def __init__(self, data=None, entities=None, *eargs, **ekwargs):
-        self._entities = {}
-        self._order = []
-
-        if entities is None:
-            for idx, edata in enumerate(data, 1):
-                entity = self.EntityCls(data=edata, idx=idx, *eargs, **ekwargs)
-                self._entities[entity.id] = entity
-                self._order.append(entity)
-        else:
-            for entity in entities:
-                self._entities[entity.id] = entity
-                self._order.append(entity)
-
-    def find(self, name):
-        '''Return Entities filtered by name, case-insensitive.
-            If falsy, return all entities
-        '''
-        if not name:
-            return self
-        return self.__class__(entities=(_ for _ in self
-                                        if re.search(name, _.name,
-                                                     re.IGNORECASE)))
-
-    def wikitable(self):
-        table = ('{| class="ss-table sortable" style="width: 100%;"\n'
-            '! Index\n'
-            '! ID\n'
-            '! Name\n'
-            '! Icon\n'
-            '! Description\n'
-        )
-        table += "".join((_.wikirow() for _ in self))
-        table += '|-\n|}'
-        return table
-
-    def pretty(self):
-        return "\n".join((_.pretty() for _ in self))
-
-    def show(self):
-        return "\n".join((str(_) for _ in self))
-
-    def get(self, eid, default=None):
-        '''Get entity by ID'''
-        return self._entities.get(eid, default)
-
-    def __getitem__(self, val):
-        entities = self._order[val]
-        if len(entities) == 1:
-            return entities[0]
-        else:
-            return self.__class__(entities=entities)
-
-    def __iter__(self):
-        for entity in self._order:
-            yield entity
-
-    def __len__(self):
-        return len(self._entities)
-
-    def __str__(self):
-        return "<{}: {:d}>".format(self.__class__.__name__,
-                                   len(self._entities))
-
-
 class Quality(Entity):
     _jsonattrs = {"Category",
                   "LevelDescriptionText",
@@ -363,10 +295,6 @@ class Quality(Entity):
         return pretty
 
 
-class Qualities(Entities):
-    EntityCls=Quality
-
-
 class Location(Entity):
     def __init__(self, data, idx=0):
         super(Location, self).__init__(data=data, idx=idx)
@@ -377,66 +305,6 @@ class Location(Entity):
         for attr in ('message', 'description'):
             pretty += "\t{}\n".format(self._desc(getattr(self, attr)))
         return pretty
-
-
-class Locations(Entities):
-    EntityCls=Location
-
-
-class QualityOperator(object):
-    '''Base Class for Effects and Requirements'''
-
-    _NOT_OP  = ('AssociatedQuality', 'Id')
-    _HIDE_OP = ('VisibleWhenRequirementFailed', 'BranchVisibleWhenRequirementFailed')
-
-    def __init__(self, data, qualities=None, parent=None):
-        self.id       = data['Id']
-        self.parent   = parent
-        self.quality  = None
-        self.operator = {_:data[_] for _ in data
-                         if _ not in self._NOT_OP}
-
-        qid = data['AssociatedQuality']['Id']
-        if qualities:
-            self.quality = qualities.get(qid)
-
-        if not self.quality:
-            # Create a dummy one
-            self.quality = Quality(data['AssociatedQuality'])
-            log.warning("Could not find Quality for %r: %d",
-                        parent, qid)
-
-    def _format_ops(self, ops):
-        '''dict {'MaxLevel': 2, 'MinLevel': 1} => string "MaxLevel: 2, MinLevel: 1"'''
-        return ", ".join(": ".join((k, str(v)))
-                         for k,v in ops.iteritems()
-                         if k not in self._HIDE_OP)
-
-    def __str__(self):
-        return "{quality} ({operator})".format(
-            quality=self.quality,
-            operator=self._format_ops(self.operator))
-
-    def __repr__(self):
-        return "<{cls} {id}: {qid} - {qname} [{ops}]>".format(
-            cls   = self.__class__.__name__,
-            id    = self.id,
-            qid   = self.quality.id,
-            qname = self.quality.name,
-            ops   = self._format_ops(self.operator))
-
-    def pretty(self, _level=0):
-        return indent("{} [{}]".format(self.quality,
-                                        self._format_ops(self.operator)),
-                      _level)
-
-
-class Effect(QualityOperator):
-    pass
-
-
-class Requirement(QualityOperator):
-    pass
 
 
 class BaseEvent(Entity):
@@ -598,6 +466,83 @@ class Outcome(BaseEvent):
         return pretty
 
 
+class Entities(object):
+    '''Base class for entity containers. Subclasses SHOULD override EntityCls!'''
+    EntityCls=Entity
+
+    def __init__(self, data=None, entities=None, *eargs, **ekwargs):
+        self._entities = {}
+        self._order = []
+
+        if entities is None:
+            for idx, edata in enumerate(data, 1):
+                entity = self.EntityCls(data=edata, idx=idx, *eargs, **ekwargs)
+                self._entities[entity.id] = entity
+                self._order.append(entity)
+        else:
+            for entity in entities:
+                self._entities[entity.id] = entity
+                self._order.append(entity)
+
+    def find(self, name):
+        '''Return Entities filtered by name, case-insensitive.
+            If falsy, return all entities
+        '''
+        if not name:
+            return self
+        return self.__class__(entities=(_ for _ in self
+                                        if re.search(name, _.name,
+                                                     re.IGNORECASE)))
+
+    def wikitable(self):
+        table = ('{| class="ss-table sortable" style="width: 100%;"\n'
+            '! Index\n'
+            '! ID\n'
+            '! Name\n'
+            '! Icon\n'
+            '! Description\n'
+        )
+        table += "".join((_.wikirow() for _ in self))
+        table += '|-\n|}'
+        return table
+
+    def pretty(self):
+        return "\n".join((_.pretty() for _ in self))
+
+    def show(self):
+        return "\n".join((str(_) for _ in self))
+
+    def get(self, eid, default=None):
+        '''Get entity by ID'''
+        return self._entities.get(eid, default)
+
+    def __getitem__(self, val):
+        entities = self._order[val]
+        if len(entities) == 1:
+            return entities[0]
+        else:
+            return self.__class__(entities=entities)
+
+    def __iter__(self):
+        for entity in self._order:
+            yield entity
+
+    def __len__(self):
+        return len(self._entities)
+
+    def __str__(self):
+        return "<{}: {:d}>".format(self.__class__.__name__,
+                                   len(self._entities))
+
+
+class Qualities(Entities):
+    EntityCls=Quality
+
+
+class Locations(Entities):
+    EntityCls=Location
+
+
 class Events(Entities):
     EntityCls=Event
 
@@ -609,6 +554,62 @@ class Events(Entities):
                                     ((lid  and _.location.id == lid) or
                                      (name and re.search(name, _.location.name,
                                                          re.IGNORECASE))))))
+
+
+class QualityOperator(object):
+    '''Base Class for Effects and Requirements'''
+
+    _NOT_OP  = ('AssociatedQuality', 'Id')
+    _HIDE_OP = ('VisibleWhenRequirementFailed', 'BranchVisibleWhenRequirementFailed')
+
+    def __init__(self, data, qualities=None, parent=None):
+        self.id       = data['Id']
+        self.parent   = parent
+        self.quality  = None
+        self.operator = {_:data[_] for _ in data
+                         if _ not in self._NOT_OP}
+
+        qid = data['AssociatedQuality']['Id']
+        if qualities:
+            self.quality = qualities.get(qid)
+
+        if not self.quality:
+            # Create a dummy one
+            self.quality = Quality(data['AssociatedQuality'])
+            log.warning("Could not find Quality for %r: %d",
+                        parent, qid)
+
+    def _format_ops(self, ops):
+        '''dict {'MaxLevel': 2, 'MinLevel': 1} => string "MaxLevel: 2, MinLevel: 1"'''
+        return ", ".join(": ".join((k, str(v)))
+                         for k,v in ops.iteritems()
+                         if k not in self._HIDE_OP)
+
+    def __str__(self):
+        return "{quality} ({operator})".format(
+            quality=self.quality,
+            operator=self._format_ops(self.operator))
+
+    def __repr__(self):
+        return "<{cls} {id}: {qid} - {qname} [{ops}]>".format(
+            cls   = self.__class__.__name__,
+            id    = self.id,
+            qid   = self.quality.id,
+            qname = self.quality.name,
+            ops   = self._format_ops(self.operator))
+
+    def pretty(self, _level=0):
+        return indent("{} [{}]".format(self.quality,
+                                        self._format_ops(self.operator)),
+                      _level)
+
+
+class Effect(QualityOperator):
+    pass
+
+
+class Requirement(QualityOperator):
+    pass
 
 
 class SunlessSea(object):
