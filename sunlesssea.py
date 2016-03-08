@@ -317,6 +317,8 @@ class Quality(Entity):
         "AvailableAt",
         "Cap",
         "Category",
+        'DifficultyScaler',
+        "DifficultyTestType",
         "IsSlot",
         "Nature",
         "Persistent",
@@ -327,8 +329,6 @@ class Quality(Entity):
         'AllowedOn',
         'AssignToSlot',
         'CssClasses',
-        'DifficultyScaler',
-        "DifficultyTestType",
         'Enhancements',
         'Notes',
         "Ordering",
@@ -349,14 +349,16 @@ class Quality(Entity):
     def __init__(self, data, idx=0, ss=None):
         super(Quality, self).__init__(data=data, idx=idx, ss=ss)
         for attr, atype, default in (
-            ("AvailableAt", str,  ""),
-            ("Cap",         int,  0),
-            ("Category",    int,  0),
-            ("IsSlot",      bool, False),
-            ("Nature",      int,  0),
-            ("Persistent",  bool, False),
-            ("Tag",         str,  ""),
-            ("Visible",     bool, False),
+            ("AvailableAt",        str,  ""),
+            ("Cap",                int,  0),
+            ("Category",           int,  0),
+            ("DifficultyScaler",   int,  0),
+            ("DifficultyTestType", int,  0),
+            ("IsSlot",             bool, False),
+            ("Nature",             int,  0),
+            ("Persistent",         bool, False),
+            ("Tag",                str,  ""),
+            ("Visible",            bool, False),
         ):
             setattr(self, attr.lower(), atype(self._data.get(attr, default)))
 
@@ -413,7 +415,7 @@ class BaseEvent(Entity):
         "Image",
     ))
 
-    def __init__(self, data, idx=0, parent=None, qualities=None, ss=None):
+    def __init__(self, data, idx=0, parent=None, ss=None):
         super(BaseEvent, self).__init__(data=data, idx=idx, ss=ss)
 
         # Requirements and Effects
@@ -487,8 +489,8 @@ class Event(BaseEvent):
         "Urgency",
     ))
 
-    def __init__(self, data, idx=0, qualities=None, locations=None, ss=None):
-        super(Event, self).__init__(data=data, idx=idx, qualities=qualities, ss=ss)
+    def __init__(self, data, idx=0, ss=None):
+        super(Event, self).__init__(data=data, idx=idx, ss=ss)
 
         self.autofire = self._data.get("Autofire", False)
         self.category = self._data.get("Category", 0)
@@ -496,8 +498,8 @@ class Event(BaseEvent):
         self.location = None
         if 'LimitedToArea' in self._data:
             iid = self._data['LimitedToArea']['Id']
-            if locations:
-                self.location = locations.get(iid)
+            if self.ss and self.ss.locations:
+                self.location = ss.locations.get(iid)
 
             if not self.location:
                 log.warning("Could not find Location for %r: %d", self, iid)
@@ -505,10 +507,7 @@ class Event(BaseEvent):
 
         self.actions = []
         for i, item in enumerate(self._data.get('ChildBranches', []), 1):
-            self.actions.append(Action(data=item, idx=i,
-                                       qualities=qualities,
-                                       parent=self,
-                                       ss=self.ss))
+            self.actions.append(Action(data=item, idx=i, parent=self, ss=self.ss))
 
     def pretty(self):
         pretty = super(Event, self).pretty()
@@ -588,8 +587,8 @@ class Action(BaseEvent):
                                ("Success", "Successful"))
     _outcome_label_failed   = (("Default", "Failed"),)
 
-    def __init__(self, data, idx=0, qualities=None, parent=None, ss=None):
-        super(Action, self).__init__(data=data, idx=idx, qualities=qualities, parent=parent, ss=ss)
+    def __init__(self, data, idx=0, parent=None, ss=None):
+        super(Action, self).__init__(data=data, idx=idx, parent=parent, ss=ss)
 
         self.outcomes = []
         failed = 'SuccessEvent' in self._data
@@ -597,7 +596,6 @@ class Action(BaseEvent):
             if item in self._data:
                 self.outcomes.append(Outcome(
                      data      = self._data[item],
-                     qualities = qualities,
                      parent    = self,
                      ss        = self.ss,
                      otype     = item,
@@ -666,10 +664,9 @@ class Outcome(BaseEvent):
         "SwitchToSettingId",
     ))
 
-    def __init__(self, data, idx=0, qualities=None, parent=None, ss=None,
+    def __init__(self, data, idx=0, parent=None, ss=None,
                  otype=None, chance=None, label=None):
-        super(Outcome, self).__init__(data=data, idx=idx,
-                                      qualities=qualities, parent=parent, ss=ss)
+        super(Outcome, self).__init__(data=data, idx=idx, parent=parent, ss=ss)
 
         self.type    = otype
         self.chance  = chance
@@ -964,9 +961,7 @@ class SunlessSea(object):
     def __init__(self, datadir=None):
         self.qualities = Qualities(data=self._load('qualities', datadir), ss=self)
         self.locations = Locations(data=self._load('areas',     datadir), ss=self)
-        self.events    = Events(   data=self._load('events',    datadir), ss=self,
-                                qualities=self.qualities,
-                                locations=self.locations)
+        self.events    = Events(   data=self._load('events',    datadir), ss=self)
 
     def _load(self, entity, datadir=None):
         path = os.path.join(datadir or DATADIR,
