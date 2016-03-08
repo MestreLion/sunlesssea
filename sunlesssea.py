@@ -530,7 +530,7 @@ class Event(BaseEvent):
             '|image        = {{{{PAGEIMAGE|{name}}}}}\n'
             '|id           = {id}\n'
             '|px           = 260px\n'
-#            '|category     = [[Story Event]]'
+            '|category     = {category}\n'
 #            '|type         = [[Story Event#Pigmote Isle|Pigmote Isle]]'
             '|linked       = {{{{link icon|{location}}}}}\n'
             '}}}}\n'
@@ -542,7 +542,7 @@ class Event(BaseEvent):
             '\n\n'
             '----\n'
             '===Trigger Conditions===\n'
-            "'''{name}''' is triggered under the following conditions:\n"
+            "'''{name}''' is available when all the following conditions are met:\n"
             , self,
             location=self.location.name if self.location else "",
         )
@@ -813,12 +813,12 @@ class QualityOperator(object):
 
     _STR_OP  = dict(
         # Requirements
+        DifficultyLevel      = 'challenge',
+        DifficultyAdvanced   = 'challenge',
         MinLevel             = '≥',
         MinAdvanced          = '≥',
         MaxLevel             = '≤',
         MaxAdvanced          = '≤',
-        DifficultyLevel      = 'challenge',
-        DifficultyAdvanced   = 'challenge',
 
         # Effects
         Level                = '+=',
@@ -849,11 +849,16 @@ class QualityOperator(object):
             log.warning("Could not find Quality for %r: %d",
                         parent, qid)
 
-    def pretty(self, _level=0):
-        return indent(format_obj("{id} - {name} {ops}",
-                                 self.quality,
-                                 ops = self._format_ops(self.operator)),
-                      _level)
+        # Integrity check
+        unknown_ops = set(self.operator) - set(self._STR_OP) - set(self._HIDE_OP)
+        if unknown_ops:
+            log.warn("Unknown operators in %r.%r: %s",
+                     self.parent, self, ", ".join(unknown_ops))
+
+    def pretty(self):
+        return format_obj("{id} - {name} {ops}",
+                          self.quality,
+                          ops = self._format_ops(self.operator))
 
     def wiki(self):
         if 'Level' in self.operator:
@@ -877,29 +882,12 @@ class QualityOperator(object):
         return sep_op.join(sep_pair.join(
             (k if raw
                 else self._STR_OP.get(k, k),
-             self._parse_advanced(str(v))))
+             self._parse_adv(str(v))))
             for k,v in ops.iteritems()
             if k not in (() if raw else self._HIDE_OP)+tuple(hidelist or ()))
 
-    def _format_str(self):
-        _OPS = (
-            # Requirements
-            'MinLevel',
-            'MinAdvanced',
-            'MaxLevel',
-            'MaxAdvanced',
-            'DifficultyLevel',
-            'DifficultyAdvanced',
-            # Effects
-            'Level',
-            'ChangeByAdvanced',
-            'SetToExactly',
-            'SetToExactlyAdvanced',
-            'OnlyIfAtLeast',
-            'OnlyIfNoMoreThan',
-        )
-
-    def _parse_advanced(self, opstr, fmt="[{name}]", *args, **kwargs):
+    def _parse_adv(self, opstr, qfmt="[{name}]", dfmt="[1 to {}]",
+                   *args, **kwargs):
         result = opstr
         for match in re.finditer(r'\[(?P<key>[^:]+):(?P<value>[^\]]+)\]', opstr):
             try:
@@ -919,10 +907,10 @@ class QualityOperator(object):
                     log.warning("Could not find Quality for %r.%r: %s",
                                 self.parent, self, mstr)
 
-                subst = format_obj(fmt, quality, *args, **kwargs)
+                subst = format_obj(qfmt, quality, *args, **kwargs)
 
             elif key == 'd':
-                subst = "[1 to {}]".format(value)
+                subst = dfmt.format(value)
             else:
                 subst = None
 
@@ -948,9 +936,102 @@ class QualityOperator(object):
 class Effect(QualityOperator):
     pass
 
-
 class Requirement(QualityOperator):
-    pass
+    _STR_OP  = dict(
+        DifficultyLevel      = 'challenge',
+        DifficultyAdvanced   = 'challenge',
+        MinLevel             = '≥',
+        MinAdvanced          = '≥',
+        MaxLevel             = '≤',
+        MaxAdvanced          = '≤',
+    )
+
+    # Order IS relevant, hence a list
+    _OPS = (
+        'DifficultyLevel',
+        'DifficultyAdvanced',
+        'MinLevel',
+        'MinAdvanced',
+        'MaxLevel',
+        'MaxAdvanced',
+    )
+
+    def _format(self,
+            qfmt="{name} {ops}",
+            dfmt="[1 to {}]",
+            advfmt="[{name}]",
+            eqfmt ="== {}",
+            adjfmt="== {} or {}",
+            minfmt="≥ {}",
+            maxfmt="≤ {}",
+            chafmt="challenge ({} for 100%)",
+            advchafmt="challenge {}",
+            opsep=" and "):
+        # quality challenge (80%) and >1 and > dsd and < asas and < dsds
+
+
+        def add(fmt, val, adv=False, *args):
+            opstrs.append(fmt.format((self._parse_adv(val, advfmt, dfmt)
+                                      if adv else val),
+                                     *args))
+
+        def perc(val):
+            return (int(100.0 * val / self.quality.difficultyscaler)
+                    if val and self.quality.difficultyscaler
+                    else 'X')
+
+        ops = self.operator.copy()
+        opstrs = []
+
+        # Loop in _OPS to preserve order
+        for op in self._OPS:
+            if not op in ops:
+                continue
+
+            value = ops[op]
+
+            if op == 'MinLevel':
+                # Look-ahead for MaxLevel, to combine '> x and < x' into '== x'
+                val = ops.get('MaxLevel', None)
+                if val == value:
+                    add(eqfmt, value)
+                    ops.pop('MaxLevel')
+
+                # Look-ahead for adjacent values, combine into '== x or y'
+                elif val == value + 1:
+                    add(adjfmt, value, False, val)
+                    ops.pop('MaxLevel')
+
+                else:
+                    # Add the string snippet
+                    add(minfmt, value)
+
+            elif op == 'MinAdvanced':
+                val = ops.get('MaxAdvanced', None)
+                if val == value:
+                    add(eqfmt, value, True)
+                    ops.pop('MaxAdvanced')
+                else:
+                    add(minfmt, value, True)
+
+            elif op == 'MaxLevel':           add(maxfmt,    value)
+            elif op == 'MaxLevelAdvanced':   add(maxfmt,    value, True)
+            elif op == 'DifficultyAdvanced': add(advchafmt, value, True)
+            elif op == 'DifficultyLevel':    add(chafmt,    perc(value))
+
+        return format_obj(qfmt, self.quality, ops=opsep.join(opstrs))
+
+    def pretty(self):
+        return self._format("{id} - {name} {ops}")
+
+    def wiki(self):
+        return self._format("{{{{link icon|{name}}}}} {ops}",
+            advfmt='([[{name}]])',
+            chafmt="challenge ({{{{action|{}}}}} for 100%)",
+            advchafmt='challenge:<br>\n:<span style="color: teal;">[{}]</span>')
+
+    def __str__(self):
+        return self._format("{name} {ops}")
 
 
 class SunlessSea(object):
