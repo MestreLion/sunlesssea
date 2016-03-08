@@ -130,7 +130,7 @@ def parse_args(argv=None):
 
     parser.add_argument('-f', '--format',
                         dest='format',
-                        choices=('bare', 'dump', 'pretty', 'wiki'),
+                        choices=('bare', 'dump', 'pretty', 'wiki', 'wikipage'),
                         default='pretty',
                         help="Output format. 'wiki' is awesome!"
                             " Available formats: [%(choices)s]."
@@ -172,6 +172,8 @@ def main(argv=None):
         entities = getattr(ss, args.entity).find(args.filter)
         if args.format == 'wiki':
             safeprint(entities.wikitable())
+        elif args.format == 'wikipage':
+            safeprint(entities.wikipage())
         elif args.format == 'pretty':
             safeprint(entities.pretty())
         elif args.format == 'dump':
@@ -198,7 +200,7 @@ def main(argv=None):
     # Testing area..
     event = ss.events.get(208079)
     safeprint(event.pretty())
-    safeprint(event.wikipage())
+    #safeprint(event.wikipage())
 
 
 
@@ -218,9 +220,10 @@ class Entity(object):
     _OPTIONAL_FIELDS  = set()  # Converted to attributes using default values
     _IGNORED_FIELDS   = set()  # No attributes created
 
-    def __init__(self, data, idx=0):
+    def __init__(self, data, idx=0, ss=None):
         self._data = data
         self.idx   = idx
+        self.ss    = ss
         self.id    = self._data['Id']
 
         self.name        = self._data.get('Name', "")
@@ -270,6 +273,13 @@ class Entity(object):
             "| {{{{game icon|{image}}}}}\n"
             "| <nowiki>{description}</nowiki>\n",
             self)
+
+    def wikipage(self):
+        return format_obj(
+            "=={name}==\n"
+            "* <nowiki>{repr}</nowiki>\n"
+            "* {wiki}\n",
+            self, entity=self, wiki=self.wiki(), repr=repr(self))
 
     def _desc(self, text, cut=80, elipsis="(...)"):
         '''Quotes and limits a description, and replace control characters'''
@@ -336,8 +346,8 @@ class Quality(Entity):
         ('image_status',  'LevelImageText', 'Images'),
     )
 
-    def __init__(self, data, idx=0):
-        super(Quality, self).__init__(data=data, idx=idx)
+    def __init__(self, data, idx=0, ss=None):
+        super(Quality, self).__init__(data=data, idx=idx, ss=ss)
         for attr, atype, default in (
             ("AvailableAt", str,  ""),
             ("Cap",         int,  0),
@@ -378,8 +388,8 @@ class Location(Entity):
     _REQUIRED_FIELDS = set(('Name',))
     _OPTIONAL_FIELDS = set(('Description', 'ImageName', 'MoveMessage'))
 
-    def __init__(self, data, idx=0):
-        super(Location, self).__init__(data=data, idx=idx)
+    def __init__(self, data, idx=0, ss=None):
+        super(Location, self).__init__(data=data, idx=idx, ss=ss)
         self.message     = self._data.get('MoveMessage', "")
 
     def pretty(self):
@@ -403,8 +413,8 @@ class BaseEvent(Entity):
         "Image",
     ))
 
-    def __init__(self, data, idx=0, parent=None, qualities=None):
-        super(BaseEvent, self).__init__(data=data, idx=idx)
+    def __init__(self, data, idx=0, parent=None, qualities=None, ss=None):
+        super(BaseEvent, self).__init__(data=data, idx=idx, ss=ss)
 
         # Requirements and Effects
         for key, attr, cls in (
@@ -415,8 +425,8 @@ class BaseEvent(Entity):
                 setattr(self, attr, [])
                 for item in self._data[key]:
                     getattr(self, attr).append(cls(data=item,
-                                                   qualities=qualities,
-                                                   parent=self))
+                                                   parent=self,
+                                                   ss=self.ss))
 
         # Only Actions and Outcomes
         if parent:
@@ -477,8 +487,8 @@ class Event(BaseEvent):
         "Urgency",
     ))
 
-    def __init__(self, data, idx=0, qualities=None, locations=None):
-        super(Event, self).__init__(data=data, idx=idx, qualities=qualities)
+    def __init__(self, data, idx=0, qualities=None, locations=None, ss=None):
+        super(Event, self).__init__(data=data, idx=idx, qualities=qualities, ss=ss)
 
         self.autofire = self._data.get("Autofire", False)
         self.category = self._data.get("Category", 0)
@@ -497,7 +507,8 @@ class Event(BaseEvent):
         for i, item in enumerate(self._data.get('ChildBranches', []), 1):
             self.actions.append(Action(data=item, idx=i,
                                        qualities=qualities,
-                                       parent=self))
+                                       parent=self,
+                                       ss=self.ss))
 
     def pretty(self):
         pretty = super(Event, self).pretty()
@@ -514,17 +525,25 @@ class Event(BaseEvent):
 
     def wikipage(self):
         page = format_obj(
+            '=={name}==\n'
             '{{{{Infobox story\n'
-            '|name         = {{{{PAGENAME}}}}\n'
-            '|image        = {{{{PAGEIMAGE}}}}\n'
+            '|name         = {name}\n'
+            '|image        = {{{{PAGEIMAGE|{name}}}}}\n'
             '|id           = {id}\n'
             '|px           = 260px\n'
 #            '|category     = [[Story Event]]'
 #            '|type         = [[Story Event#Pigmote Isle|Pigmote Isle]]'
             '|linked       = {{{{link icon|{location}}}}}\n'
             '}}}}\n'
+            "'''{name}''' is a [[Sunless Sea]] [[Story Event]] in [[{location}]]\n"
             '\n\n'
+            '----\n'
+            '===Description===\n'
+            "''\"{description}\"''\n"
+            '\n\n'
+            '----\n'
             '===Trigger Conditions===\n'
+            "'''{name}''' is triggered under the following conditions:\n"
             , self,
             location=self.location.name if self.location else "",
         )
@@ -533,6 +552,7 @@ class Event(BaseEvent):
 
         page += (
             '\n\n'
+            '----\n'
             '===Interactions===\n'
             '{| class="ss-table sortable" style="width: 100%;"\n'
             '! style="width:10%;" | Interaction\n'
@@ -568,8 +588,8 @@ class Action(BaseEvent):
                                ("Success", "Successful"))
     _outcome_label_failed   = (("Default", "Failed"),)
 
-    def __init__(self, data, idx=0, qualities=None, parent=None):
-        super(Action, self).__init__(data=data, idx=idx, qualities=qualities, parent=parent)
+    def __init__(self, data, idx=0, qualities=None, parent=None, ss=None):
+        super(Action, self).__init__(data=data, idx=idx, qualities=qualities, parent=parent, ss=ss)
 
         self.outcomes = []
         failed = 'SuccessEvent' in self._data
@@ -579,6 +599,7 @@ class Action(BaseEvent):
                      data      = self._data[item],
                      qualities = qualities,
                      parent    = self,
+                     ss        = self.ss,
                      otype     = item,
                      chance    = self._data.get(item + 'Chance', None),
                      label     = self._outcome_label(item, failed)))
@@ -594,7 +615,7 @@ class Action(BaseEvent):
     def gamenote(self):
         note = re.search(r'\[([^\]]*)\]', self.description)
         if note:
-            return note.groups()[0]
+            return note.group(1)
         return ""
 
     def pretty(self):
@@ -617,7 +638,7 @@ class Action(BaseEvent):
             |{note}
         '''.replace(4 * " ", "").format(
             name=self.name,
-            reqs="<br>\n".join(_.wiki() for _ in self.requirements) or "-",
+            reqs="<p></p>\n".join(_.wiki() for _ in self.requirements) or "-",
             outs="\n<br>\n".join(_.wiki() for _ in self.outcomes) or "-",
             note=iif(note, " {{{{game note|{}}}}}".format(note))
         )
@@ -645,10 +666,10 @@ class Outcome(BaseEvent):
         "SwitchToSettingId",
     ))
 
-    def __init__(self, data, idx=0, qualities=None, parent=None,
+    def __init__(self, data, idx=0, qualities=None, parent=None, ss=None,
                  otype=None, chance=None, label=None):
         super(Outcome, self).__init__(data=data, idx=idx,
-                                      qualities=qualities, parent=parent)
+                                      qualities=qualities, parent=parent, ss=ss)
 
         self.type    = otype
         self.chance  = chance
@@ -676,7 +697,7 @@ class Outcome(BaseEvent):
             chance  = iif(self.chance, " ({}%)".format(self.chance)),
             label   = self.label,
             name    = iif(self.name, "{{{{effect title|{}}}}}".format(self.name)),
-            effects = "<br>\n".join(_.wiki() for _ in self.effects),
+            effects = "<p></p>\n".join(_.wiki() for _ in self.effects),
             sep     = iif(self.effects and self.trigger, "<br>\n"),
             trigger = iif(self.trigger and self.trigger != self.parent.parent.id,
                           "{{{{trigger event|{}}}}}".format(self.trigger)),
@@ -687,13 +708,15 @@ class Entities(object):
     '''Base class for entity containers. Subclasses SHOULD override EntityCls!'''
     EntityCls=Entity
 
-    def __init__(self, data=None, entities=None, *eargs, **ekwargs):
+    def __init__(self, data=None, entities=None, ss=None, *eargs, **ekwargs):
         self._entities = {}
         self._order = []
+        self.ss = ss
 
         if entities is None:
             for idx, edata in enumerate(data, 1):
-                entity = self.EntityCls(data=edata, idx=idx, *eargs, **ekwargs)
+                entity = self.EntityCls(data=edata, idx=idx, ss=self.ss,
+                                        *eargs, **ekwargs)
                 self._entities[entity.id] = entity
                 self._order.append(entity)
         else:
@@ -722,6 +745,12 @@ class Entities(object):
         table += "".join((_.wikirow() for _ in self))
         table += '|-\n|}'
         return table
+
+    def wikipage(self):
+        page = ('')
+        page += "\n\n".join((_.wikipage() for _ in self))
+        page += ''
+        return page
 
     def dump(self):
         return "\n".join((_.dump() for _ in self))
@@ -780,41 +809,54 @@ class QualityOperator(object):
     '''Base Class for Effects and Requirements'''
 
     _NOT_OP  = ('AssociatedQuality', 'Id')
-    _HIDE_OP = ('VisibleWhenRequirementFailed', 'BranchVisibleWhenRequirementFailed')
+    _HIDE_OP = ('VisibleWhenRequirementFailed',
+                'BranchVisibleWhenRequirementFailed',
+                'Priority',
+                'ForceEquip')
 
     _STR_OP  = dict(
-        MinLevel          = '≥',
-        MaxLevel          = '≤',
-        Level             = '+',
-        SetToExactly      = '=',
-        OnlyIfNoMoreThan  = 'if ≤',
-        OnlyIfAtLeast     = 'if ≥',
+        # Requirements
+        MinLevel             = '≥',
+        MinAdvanced          = '≥',
+        MaxLevel             = '≤',
+        MaxAdvanced          = '≤',
+        DifficultyLevel      = 'challenge',
+        DifficultyAdvanced   = 'challenge',
+
+        # Effects
+        Level                = '+=',
+        ChangeByAdvanced     = '+=',
+        SetToExactly         = '=',
+        SetToExactlyAdvanced = '=',
+        OnlyIfAtLeast        = 'if ≥',
+        OnlyIfNoMoreThan     = 'if ≤',
     )
 
     _reverse = ('Terror', 'Hunger', 'Menaces: Wounds')
 
-    def __init__(self, data, qualities=None, parent=None):
+    def __init__(self, data, parent=None, ss=None):
         self.id       = data['Id']
         self.parent   = parent
+        self.ss       = ss
         self.quality  = None
         self.operator = {_:data[_] for _ in data
                          if _ not in self._NOT_OP}
 
         qid = data['AssociatedQuality']['Id']
-        if qualities:
-            self.quality = qualities.get(qid)
+        if self.ss and self.ss.qualities:
+            self.quality = self.ss.qualities.get(qid)
 
         if not self.quality:
             # Create a dummy one
-            self.quality = Quality(data['AssociatedQuality'])
+            self.quality = Quality(data=data['AssociatedQuality'], ss=self.ss)
             log.warning("Could not find Quality for %r: %d",
                         parent, qid)
 
-    def _format_ops(self, ops, sep_op=" and ", sep_pair=" ", hidelist=None):
-        '''dict {'MaxLevel': 2, 'MinLevel': 1} => string "MaxLevel: 2, MinLevel: 1"'''
-        return sep_op.join(sep_pair.join((self._STR_OP.get(k, k), str(v)))
-                         for k,v in ops.iteritems()
-                         if k not in self._HIDE_OP+tuple(hidelist or ()))
+    def pretty(self, _level=0):
+        return indent(format_obj("{id} - {name} {ops}",
+                                 self.quality,
+                                 ops = self._format_ops(self.operator)),
+                      _level)
 
     def wiki(self):
         if 'Level' in self.operator:
@@ -831,23 +873,79 @@ class QualityOperator(object):
                 ops=self._format_ops(self.operator)
             )
 
+    def _format_ops(self, ops, sep_op=" and ", sep_pair=" ", hidelist=None, raw=False):
+        '''Basic operator formatting:
+            {'MaxLevel': 2, 'MinLevel': 1} => "MaxLevel: 2, MinLevel: 1"
+        '''
+        return sep_op.join(sep_pair.join(
+            (k if raw
+                else self._STR_OP.get(k, k),
+             self._parse_advanced(str(v))))
+            for k,v in ops.iteritems()
+            if k not in (() if raw else self._HIDE_OP)+tuple(hidelist or ()))
+
+    def _format_str(self):
+        _OPS = (
+            # Requirements
+            'MinLevel',
+            'MinAdvanced',
+            'MaxLevel',
+            'MaxAdvanced',
+            'DifficultyLevel',
+            'DifficultyAdvanced',
+            # Effects
+            'Level',
+            'ChangeByAdvanced',
+            'SetToExactly',
+            'SetToExactlyAdvanced',
+            'OnlyIfAtLeast',
+            'OnlyIfNoMoreThan',
+        )
+
+    def _parse_advanced(self, opstr, fmt="[{name}]", *args, **kwargs):
+        result = opstr
+        for match in re.finditer(r'\[(?P<key>[^:]+):(?P<value>[^\]]+)\]', opstr):
+            try:
+                mstr, (key, value) = match.group(), match.group('key', 'value')
+            except Exception:
+                print((repr(self), opstr, match))
+                sys.exit()
+
+            if   key == 'q':
+                if self.ss and self.ss.qualities:
+                    quality = self.ss.qualities.get(int(value))
+                else:
+                    quality = None
+                if not quality:
+                    # Create a dummy one
+                    quality = Quality(data={'Id': int(value)}, ss=self.ss)
+                    log.warning("Could not find Quality for %r.%r: %s",
+                                self.parent, self, mstr)
+
+                subst = format_obj(fmt, quality, *args, **kwargs)
+
+            elif key == 'd':
+                subst = "[1 to {}]".format(value)
+            else:
+                subst = None
+
+            if subst:
+                result = result.replace(mstr, subst, 1)
+
+        return result
+
     def __str__(self):
-        return "{quality} ({operator})".format(
-            quality=self.quality,
-            operator=self._format_ops(self.operator))
+        return "{qname} {operator}".format(
+            qname    = self.quality.name,
+            operator = self._format_ops(self.operator))
 
     def __repr__(self):
-        return "<{cls} {id}: {qid} - {qname} [{ops}]>".format(
+        return b"<{cls} {id}: {qid} - {qname} {ops}>".format(
             cls   = self.__class__.__name__,
             id    = self.id,
             qid   = self.quality.id,
-            qname = self.quality.name,
-            ops   = self._format_ops(self.operator))
-
-    def pretty(self, _level=0):
-        return indent("{} [{}]".format(self.quality,
-                                        self._format_ops(self.operator)),
-                      _level)
+            qname = repr(self.quality.name),
+            ops   = repr(self.operator))
 
 
 class Effect(QualityOperator):
@@ -864,9 +962,9 @@ class SunlessSea(object):
         and call each entity container's constructor
     '''
     def __init__(self, datadir=None):
-        self.qualities = Qualities(data=self._load('qualities', datadir))
-        self.locations = Locations(data=self._load('areas', datadir))
-        self.events    = Events(data=self._load('events', datadir),
+        self.qualities = Qualities(data=self._load('qualities', datadir), ss=self)
+        self.locations = Locations(data=self._load('areas',     datadir), ss=self)
+        self.events    = Events(   data=self._load('events',    datadir), ss=self,
                                 qualities=self.qualities,
                                 locations=self.locations)
 
