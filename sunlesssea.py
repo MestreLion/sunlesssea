@@ -171,6 +171,9 @@ def main(argv=None):
 
     if args.entity in ('locations', 'qualities', 'events'):
         entities = getattr(ss, args.entity).find(args.filter)
+        if not entities:
+            log.error("No %s found for %r", args.entity, args.filter)
+            return
         if args.format == 'wiki':
             safeprint(entities.wikitable())
         elif args.format == 'wikipage':
@@ -251,6 +254,9 @@ class Entity(object):
         if f:
             log.warn("%r contains UNKNOWN fields: %s",
                       self, ", ".join(sorted(f)))
+
+        if not self.ss:
+            log.error("%r has no reference to a SunlessSea instance", self)
 
     def dump(self):
         return self._data
@@ -681,25 +687,32 @@ class Outcome(BaseEvent):
                                       indent(super(Outcome, self).pretty(), 1))
 
         if self.trigger:
-            pretty += "\t\tTrigger event: {}\n".format(self.trigger)
+            pretty += "\t\tTrigger event: {} - {}\n".format(self.trigger.id,
+                                                            self.trigger.name)
 
         return pretty
 
     def wiki(self):
-        return '''
-            {label} event{chance}<br>{name}
-            <ul>
-            {effects}{sep}{trigger}
-            </ul>
-            '''.replace(4 * " ", "").format(
-            chance  = iif(self.chance, " ({}%)".format(self.chance)),
-            label   = self.label,
-            name    = iif(self.name, "{{{{effect title|{}}}}}".format(self.name)),
-            effects = "<p></p>\n".join(_.wiki() for _ in self.effects),
-            sep     = iif(self.effects and self.trigger, "<br>\n"),
-            trigger = iif(self.trigger and self.trigger != self.parent.parent.id,
-                          "{{{{trigger event|{}}}}}".format(self.trigger)),
-        ).strip()
+        page = (
+            "{label} event{chance}<br>{name}\n"
+            "<ul>\n"
+        ).format(
+            chance = iif(self.chance, " ({}%)".format(self.chance)),
+            label  = self.label,
+            name   = iif(self.name, "{{{{effect title|{}}}}}".format(self.name)),
+        )
+        for effect in self.effects:
+            page += "{}<p></p>\n".format(effect.wiki())
+
+        if self.trigger and self.trigger is not self.parent.parent:
+            page += "{{{{trigger event|{}}}}}<p></p>\n".format(self.trigger.name)
+
+        elif not self.effects:
+            page += "-<p></p>\n"
+
+        page += "</ul>"
+
+        return page
 
 
 class Entities(object):
@@ -896,7 +909,9 @@ class QualityOperator(object):
                     if val and self.quality.difficultyscaler
                     else 'X')
 
-        ops = self.operator.copy()
+        ops = {_:self.operator[_]
+               for _ in self.operator
+               if _ not in self._HIDE_OP}
         posopstrs = []
         qtyopstrs = []
         useqty = ('Level' in ops or 'ChangeByAdvanced' in ops)
@@ -1070,6 +1085,26 @@ class SunlessSea(object):
         self.qualities = Qualities(data=self._load('qualities', datadir), ss=self)
         self.locations = Locations(data=self._load('areas',     datadir), ss=self)
         self.events    = Events(   data=self._load('events',    datadir), ss=self)
+
+        # Add 'LinkToEvent' references
+        for event in self.events:
+            for action in event.actions:
+                for outcome in action.outcomes:
+                    trigger = outcome.trigger
+                    if type(trigger) is not int:
+                        continue
+
+                    outcome.trigger = self.events.get(trigger)
+                    if outcome.trigger:
+                        continue
+
+                    # Create a dummy one
+                    outcome.trigger = Event(ss=self,
+                                            data=dict(Id=trigger,
+                                                      ChildBranches=[],
+                                                      QualitiesRequired=[]))
+                    log.error("%r.%r.%r links to a non-existant event: %d",
+                              event, action, outcome, trigger)
 
     def _load(self, entity, datadir=None):
         path = os.path.join(datadir or DATADIR,
