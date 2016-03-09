@@ -526,7 +526,7 @@ class Event(BaseEvent):
             '=={name}==\n'
             '{{{{Infobox story\n'
             '|name         = {name}\n'
-            '|image        = {{{{PAGEIMAGE|{name}}}}}\n'
+            '|image        = SS {image}gaz.png\n'
             '|id           = {id}\n'
             '|px           = 260px\n'
             '|category     = {category}\n'
@@ -806,11 +806,11 @@ class Entities(object):
         return self._entities.get(eid, default)
 
     def __getitem__(self, val):
-        entities = self._order[val]
-        if len(entities) == 1:
-            return entities[0]
+        if isinstance(val, int):
+            return self._order[val]
         else:
-            return self.__class__(entities=entities)
+            return self.__class__(entities=self._order[val],
+                                  ss=self.ss)
 
     def __iter__(self):
         for entity in self._order:
@@ -837,7 +837,8 @@ class Events(Entities):
 
     def at(self, lid=0, name=""):
         '''Return Events by location ID or name'''
-        return Events(entities=(_ for _
+        return Events(ss=self.ss,
+                      entities=(_ for _
                                 in self
                                 if (_.location and
                                     ((lid  and _.location.id == lid) or
@@ -905,7 +906,8 @@ class QualityOperator(object):
             lvladvfmt="+{}",
             advfmt='([[{name}]])',
             chafmt="challenge ({{{{action|{}}}}} for 100%)",
-            chaadvfmt='challenge:<br>\n:<span style="color: teal;">[{}]</span>')
+            chaadvfmt=('challenge:<br>\n:<span style="color: teal;">'
+                       '[{diff}]*100/{scaler}</span> for 100%'))
 
     def _format(self,
             # Defaults are suitable for __str__()
@@ -927,7 +929,7 @@ class QualityOperator(object):
             ifadjfmt="= {v1} or {v2}",  # "if == {v1} or {v2}"
             elsefmt="{op}: {}",
             chafmt="challenge ({} for 100%)",
-            chaadvfmt="challenge {}",
+            chaadvfmt="challenge: ({diff})*100/{scaler}",
             opsep=" and ",
             qtyopsep=" + ",
             ifsep=", only if ",
@@ -1016,10 +1018,14 @@ class QualityOperator(object):
 
                 qtyopstrs.append(self._parse_adv(val, advfmt, dfmt))
 
+            elif op == 'DifficultyAdvanced':
+                posopstrs.append(chaadvfmt.format(
+                    diff=self._parse_adv(value, advfmt, dfmt),
+                    scaler=self.quality.difficultyscaler))
+
             elif op == 'MaxLevel':             add(maxfmt,    value)
             elif op == 'MaxLevelAdvanced':     add(maxfmt,    value, True)
             elif op == 'MaxAdvanced':          add(maxfmt,    value, True)
-            elif op == 'DifficultyAdvanced':   add(chaadvfmt, value, True)
             elif op == 'DifficultyLevel':      add(chafmt,    perc(value))
             elif op == 'SetToExactly':         add(setfmt,    value)
             elif op == 'SetToExactlyAdvanced': add(setfmt,    value, True)
