@@ -853,11 +853,11 @@ class QualityOperator(object):
     # Order IS relevant, hence a tuple
     _OPS = ()
 
-    _NOT_OP  = ('AssociatedQuality', 'Id')
-    _HIDE_OP = ('VisibleWhenRequirementFailed',
-                'BranchVisibleWhenRequirementFailed',
-                'Priority',
-                'ForceEquip')
+    _NOT_OP  = set(('AssociatedQuality', 'Id'))
+    _HIDE_OP = set(('VisibleWhenRequirementFailed',
+                    'BranchVisibleWhenRequirementFailed',
+                    'Priority',
+                    'ForceEquip'))
 
     _reverse = ('Terror', 'Hunger', 'Menaces: Wounds')
 
@@ -879,22 +879,28 @@ class QualityOperator(object):
             log.warning("Could not find Quality for %r: %d",
                         parent, qid)
 
-        # Integrity check
-        unknown_ops = set(self.operator) - set(self._OPS) - set(self._HIDE_OP)
-        if unknown_ops:
+        # Integrity checks
+        ops = set(self.operator) - self._HIDE_OP
+        if not ops:
+            return  # temporarily disable the warning, 2 occurrences
+            log.error("No relevant operators in %r.%r",
+                     self.parent, self)
+
+        ops = ops - set(self._OPS)
+        if ops:
             log.warn("Unknown operators in %r.%r: %s",
-                     self.parent, self, ", ".join(unknown_ops))
+                     self.parent, self, ", ".join(ops))
 
     def pretty(self):
-        return self._format("{id} - {name} {ops}",
-                            "{id} - {name} += {qtyops}{qsep}{ops}",
-                            "{id} - {name} += ({qtyops}){qsep}{ops}")
+        return self._format("{id} - {name}{sep}{ops}{ifsep}{ifs}",
+                            "{id} - {name} += {qtyops}{ifsep}{ifs}",
+                            "{id} - {name} += ({qtyops}){ifsep}{ifs}")
 
     def wiki(self):
         return self._format(
-            "{{{{link icon|{name}}}}} {ops}",
-            "{{{{link qty|{qtyops}|{name}}}}}{qsep}{ops}",
-            "{{{{link qty|{qtyops}|{name}||*}}}}{qsep}{ops}",
+            "{{{{link icon|{name}}}}}{sep}{ops}{ifsep}{ifs}",
+            "{{{{link qty|{qtyops}|{name}}}}}{ifsep}{ifs}",
+            "{{{{link qty|{qtyops}|{name}||*}}}}{ifsep}{ifs}",
             lvlfmt="{:+d}",
             lvladvfmt="+{}",
             advfmt='([[{name}]])',
@@ -903,9 +909,9 @@ class QualityOperator(object):
 
     def _format(self,
             # Defaults are suitable for __str__()
-            qfmt="{name} {ops}",
-            qfmtqty="{name} += {qtyops}{qsep}{ops}",
-            qfmtrev="{name} += ({qtyops}){qsep}{ops}",
+            qfmt="{name}{sep}{ops}{ifsep}{ifs}",
+            qfmtqty="{name} += {qtyops}{ifsep}{ifs}",
+            qfmtrev="{name} += ({qtyops}){ifsep}{ifs}",
             dfmt="[1 to {}]",
             advfmt="[{name}]",
             lvlfmt="{:d}",
@@ -915,16 +921,17 @@ class QualityOperator(object):
             adjfmt="= {v1} or {v2}",  # "== {v1} or {v2}"
             minfmt="≥ {}",
             maxfmt="≤ {}",
-            ifminfmt="only if ≥ {}",
-            ifmaxfmt="only if ≤ {}",
-            ifeqfmt="only if = {}",  # "if == {}"
-            ifadjfmt="only if = {v1} or {v2}",  # "if == {v1} or {v2}"
+            ifminfmt="≥ {}",  # "if ≥ {}"
+            ifmaxfmt="≤ {}",  # "if ≤ {}"
+            ifeqfmt="= {}",  # "if == {}"
+            ifadjfmt="= {v1} or {v2}",  # "if == {v1} or {v2}"
             elsefmt="{op}: {}",
             chafmt="challenge ({} for 100%)",
             chaadvfmt="challenge {}",
             opsep=" and ",
             qtyopsep=" + ",
-            qsep=", "):
+            ifsep=", only if ",
+            sep=" "):
 
         def add(fmt, value, adv=False, *args, **kwargs):
             posopstrs.append(fmt.format((self._parse_adv(str(value),
@@ -943,17 +950,12 @@ class QualityOperator(object):
                if _ not in self._HIDE_OP}
         posopstrs = []
         qtyopstrs = []
-        useqty = ('Level' in ops or 'ChangeByAdvanced' in ops)
-        userev = useqty and self.quality.name in self._reverse
-
-        if userev:
-            qfmt = qfmtrev
-        elif useqty:
-            qfmt = qfmtqty
+        ifopstrs  = []
+        useqty = False  # ('Level' in ops or 'ChangeByAdvanced' in ops)
 
         # Loop in _OPS to preserve order
         for op in self._OPS:
-            if not op in ops:
+            if op not in ops:
                 continue
 
             value = ops[op]
@@ -987,32 +989,27 @@ class QualityOperator(object):
                 # Look-ahead, equal values
                 val = ops.get('OnlyIfNoMoreThan', None)
                 if val == value:
-                    add(ifeqfmt, value)
+                    ifopstrs.append(ifeqfmt.format(value))
                     ops.pop('OnlyIfNoMoreThan')
 
                 # Look-ahead for adjacent values
                 elif val == value + 1:
-                    add(ifadjfmt, None, v1=value, v2=val)
+                    ifopstrs.append(ifadjfmt.format(v1=value, v2=val))
                     ops.pop('OnlyIfNoMoreThan')
 
                 else:
                     # Add the string snippet
-                    add(ifminfmt,  value)
+                    ifopstrs.append(ifminfmt.format(value))
+
+            elif op == 'OnlyIfNoMoreThan':
+                ifopstrs.append(ifmaxfmt.format(value))
 
             elif op == 'Level':
-                # Integrity check
-                if set(ops) - set((op, 'OnlyIfAtLeast', 'OnlyIfNoMoreThan')):
-                    log.warn("'%s' used with mutually exclusive"
-                             " Quality operators: %r.%r",
-                             op, self.parent, self)
+                useqty = True
                 qtyopstrs.append(lvlfmt.format(value))
 
             elif op == 'ChangeByAdvanced':
-                if set(ops) - set((op, 'OnlyIfAtLeast', 'OnlyIfNoMoreThan')):
-                    log.warn("'%s' used with mutually exclusive"
-                             " Quality operators: %r.%r",
-                             op, self.parent, self)
-
+                useqty = True
                 val = re.sub(r"^[+-]?0+([+-])", "\g<1>", value)
                 if val[:1] not in "+-":
                     val = lvladvfmt.format(val)
@@ -1022,7 +1019,6 @@ class QualityOperator(object):
             elif op == 'MaxLevel':             add(maxfmt,    value)
             elif op == 'MaxLevelAdvanced':     add(maxfmt,    value, True)
             elif op == 'MaxAdvanced':          add(maxfmt,    value, True)
-            elif op == 'OnlyIfNoMoreThan':     add(ifmaxfmt,  value)
             elif op == 'DifficultyAdvanced':   add(chaadvfmt, value, True)
             elif op == 'DifficultyLevel':      add(chafmt,    perc(value))
             elif op == 'SetToExactly':         add(setfmt,    value)
@@ -1031,9 +1027,17 @@ class QualityOperator(object):
             else:
                 add(elsefmt, value, adv='Advanced' in op, op=op)
 
+        if useqty:
+            if self.quality.name in self._reverse:
+                qfmt = qfmtrev
+            else:
+                qfmt = qfmtqty
+
         return format_obj(qfmt,
                           self.quality,
-                          qsep=iif(posopstrs, qsep),
+                          sep=iif(posopstrs, sep),
+                          ifsep=iif(ifopstrs, ifsep),
+                          ifs=opsep.join(ifopstrs),
                           ops=opsep.join(posopstrs),
                           qtyops=qtyopsep.join(qtyopstrs),
         )
@@ -1072,7 +1076,7 @@ class QualityOperator(object):
         return result
 
     def __str__(self):
-        return self._format("{name} {ops}")
+        return self._format()
 
     def __repr__(self):
         return b"<{cls} {id}: {qid} - {qname} {ops}>".format(
@@ -1092,6 +1096,16 @@ class Effect(QualityOperator):
         'OnlyIfAtLeast',
         'OnlyIfNoMoreThan',
     )
+
+    def __init__(self, data, parent=None, ss=None):
+        super(Effect, self).__init__(data=data, parent=parent, ss=ss)
+
+        # Integrity check
+        ops = set(self.operator) - self._HIDE_OP - set(('OnlyIfAtLeast',
+                                                        'OnlyIfNoMoreThan'))
+        if len(ops) > 1:
+            log.error("Mutually exclusive operators in %r.%r: %s",
+                      self.parent, self, ops)
 
 
 class Requirement(QualityOperator):
