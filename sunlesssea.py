@@ -24,15 +24,12 @@
 # Ideas
 # - pretty(short=True), so they can use each other
 #    Ex: Location.pretty(short=True) does not print description
-# - just the caller indents the result, using indent() - no more _level madness!
 # - make pretty uniform across indent, \n, etc
-# - Outcomes are a dict: only Default, Success, Rare.
-#    4 keys: DefaultEvent, RareDefaultEvent, SuccessEvent, RareSuccessEvent
-#    Possible combinations:
-#        Def+RarDef
-#        Def(Fail)+RarDef(SuperFail)+Suc
-#        Def(Fail)+Suc
-#        Def(Fail)+Suc+RarSuc(SuperSuc)
+# - improve advanced parser to handle "[d:[q:1234]]"
+# - format +[1 to x] so it can use {{qty}} to get non-text color
+# - read text statuses on numeric quality assignments/tests
+#    so "QualityX := 3" => "QualityX := 3, [3's Status Description]"
+#    or even "Description" (think about SAY)
 
 
 from __future__ import unicode_literals, print_function
@@ -665,7 +662,7 @@ class Action(BaseEvent):
             "<ul>\n"
             "{reqs}<p></p>\n"
             "</ul>\n"
-            "{firstrow}"  # firstrow always contains trailing '\n'
+            "{firstrow}"  # firstrow always contains leading '|' and trailing '\n'
             "{rowspan}|{note}\n"
         ).format(
             name=self.name,
@@ -690,7 +687,7 @@ class Action(BaseEvent):
                             if self.canfail
                             else ())):
             label = label.replace(sfrom, sto)
-        return label
+        return label.capitalize()
 
 
 class Outcome(BaseEvent):
@@ -913,15 +910,15 @@ class QualityOperator(object):
             advfmt="[{name}]",
             lvlfmt="{:d}",
             lvladvfmt="{}",
-            setfmt=":= {}",
-            eqfmt ="== {}",
-            adjfmt="== {v1} or {v2}",
+            setfmt="= {}",  # ":= {}"
+            eqfmt ="= {}",  # "== {}"
+            adjfmt="= {v1} or {v2}",  # "== {v1} or {v2}"
             minfmt="≥ {}",
             maxfmt="≤ {}",
-            ifminfmt="if ≥ {}",
-            ifmaxfmt="if ≤ {}",
-            ifeqfmt="if == {}",
-            ifadjfmt="if == {v1} or {v2}",
+            ifminfmt="only if ≥ {}",
+            ifmaxfmt="only if ≤ {}",
+            ifeqfmt="only if = {}",  # "if == {}"
+            ifadjfmt="only if = {v1} or {v2}",  # "if == {v1} or {v2}"
             elsefmt="{op}: {}",
             chafmt="challenge ({} for 100%)",
             chaadvfmt="challenge {}",
