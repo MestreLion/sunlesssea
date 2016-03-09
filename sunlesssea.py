@@ -44,6 +44,7 @@ import argparse
 import logging
 import json
 import re
+import math
 
 
 log = logging.getLogger(os.path.basename(os.path.splitext(__file__)[0]))
@@ -803,31 +804,18 @@ class Events(Entities):
 
 
 class QualityOperator(object):
-    '''Base Class for Effects and Requirements'''
+    '''Base Class for Effects and Requirements
+        Subclasses MUST override _OPS
+    '''
+
+    # Order IS relevant, hence a tuple
+    _OPS = ()
 
     _NOT_OP  = ('AssociatedQuality', 'Id')
     _HIDE_OP = ('VisibleWhenRequirementFailed',
                 'BranchVisibleWhenRequirementFailed',
                 'Priority',
                 'ForceEquip')
-
-    _STR_OP  = dict(
-        # Requirements
-        DifficultyLevel      = 'challenge',
-        DifficultyAdvanced   = 'challenge',
-        MinLevel             = '≥',
-        MinAdvanced          = '≥',
-        MaxLevel             = '≤',
-        MaxAdvanced          = '≤',
-
-        # Effects
-        Level                = '+=',
-        ChangeByAdvanced     = '+=',
-        SetToExactly         = '=',
-        SetToExactlyAdvanced = '=',
-        OnlyIfAtLeast        = 'if ≥',
-        OnlyIfNoMoreThan     = 'if ≤',
-    )
 
     _reverse = ('Terror', 'Hunger', 'Menaces: Wounds')
 
@@ -850,41 +838,161 @@ class QualityOperator(object):
                         parent, qid)
 
         # Integrity check
-        unknown_ops = set(self.operator) - set(self._STR_OP) - set(self._HIDE_OP)
+        unknown_ops = set(self.operator) - set(self._OPS) - set(self._HIDE_OP)
         if unknown_ops:
             log.warn("Unknown operators in %r.%r: %s",
                      self.parent, self, ", ".join(unknown_ops))
 
     def pretty(self):
-        return format_obj("{id} - {name} {ops}",
-                          self.quality,
-                          ops = self._format_ops(self.operator))
+        return self._format("{id} - {name} {ops}",
+                            "{id} - {name} += {qtyops}{qsep}{ops}",
+                            "{id} - {name} += ({qtyops}){qsep}{ops}")
 
     def wiki(self):
-        if 'Level' in self.operator:
-            return '{{{{link qty|{level:+d}|{name}{rev}}}}}{sep}{ops}'.format(
-                name=self.quality.name,
-                rev="||-" if self.quality.name in self._reverse else "",
-                level=self.operator['Level'],
-                sep=", " if len(self.operator) > 1 else "",
-                ops=self._format_ops(self.operator, hidelist=['Level']),
-            )
-        else:
-            return '{{{{link icon|{name}}}}} {ops}'.format(
-                name=self.quality.name,
-                ops=self._format_ops(self.operator)
-            )
+        return self._format(
+            "{{{{link icon|{name}}}}} {ops}",
+            "{{{{link qty|{qtyops}|{name}}}}}{qsep}{ops}",
+            "{{{{link qty|{qtyops}|{name}||*}}}}{qsep}{ops}",
+            lvlfmt="{:+d}",
+            lvladvfmt="+{}",
+            advfmt='([[{name}]])',
+            chafmt="challenge ({{{{action|{}}}}} for 100%)",
+            chaadvfmt='challenge:<br>\n:<span style="color: teal;">[{}]</span>')
 
-    def _format_ops(self, ops, sep_op=" and ", sep_pair=" ", hidelist=None, raw=False):
-        '''Basic operator formatting:
-            {'MaxLevel': 2, 'MinLevel': 1} => "MaxLevel: 2, MinLevel: 1"
-        '''
-        return sep_op.join(sep_pair.join(
-            (k if raw
-                else self._STR_OP.get(k, k),
-             self._parse_adv(str(v))))
-            for k,v in ops.iteritems()
-            if k not in (() if raw else self._HIDE_OP)+tuple(hidelist or ()))
+    def _format(self,
+            # Defaults are suitable for __str__()
+            qfmt="{name} {ops}",
+            qfmtqty="{name} += {qtyops}{qsep}{ops}",
+            qfmtrev="{name} += ({qtyops}){qsep}{ops}",
+            dfmt="[1 to {}]",
+            advfmt="[{name}]",
+            lvlfmt="{:d}",
+            lvladvfmt="{}",
+            setfmt=":= {}",
+            eqfmt ="== {}",
+            adjfmt="== {v1} or {v2}",
+            minfmt="≥ {}",
+            maxfmt="≤ {}",
+            ifminfmt="if ≥ {}",
+            ifmaxfmt="if ≤ {}",
+            ifeqfmt="if == {}",
+            ifadjfmt="if == {v1} or {v2}",
+            elsefmt="{op}: {}",
+            chafmt="challenge ({} for 100%)",
+            chaadvfmt="challenge {}",
+            opsep=" and ",
+            qtyopsep=" + ",
+            qsep=", "):
+
+        def add(fmt, value, adv=False, *args, **kwargs):
+            posopstrs.append(fmt.format((self._parse_adv(str(value),
+                                                         advfmt,
+                                                         dfmt)
+                                         if adv else value),
+                                        *args, **kwargs))
+
+        def perc(val):
+            return (int(math.ceil(100.0 * val / self.quality.difficultyscaler))
+                    if val and self.quality.difficultyscaler
+                    else 'X')
+
+        ops = self.operator.copy()
+        posopstrs = []
+        qtyopstrs = []
+        useqty = ('Level' in ops or 'ChangeByAdvanced' in ops)
+        userev = useqty and self.quality.name in self._reverse
+
+        if userev:
+            qfmt = qfmtrev
+        elif useqty:
+            qfmt = qfmtqty
+
+        # Loop in _OPS to preserve order
+        for op in self._OPS:
+            if not op in ops:
+                continue
+
+            value = ops[op]
+
+            if op == 'MinLevel':
+                # Look-ahead for MaxLevel, to combine '> x and < x' into '== x'
+                val = ops.get('MaxLevel', None)
+                if val == value:
+                    add(eqfmt, value)
+                    ops.pop('MaxLevel')
+
+                # Look-ahead for adjacent values, combine into '== x or y'
+                elif val == value + 1:
+                    add(adjfmt, None, v1=value, v2=val)
+                    ops.pop('MaxLevel')
+
+                else:
+                    # Add the string snippet
+                    add(minfmt, value)
+
+            elif op == 'MinAdvanced':
+                # Look-ahead for equal values
+                val = ops.get('MaxAdvanced', None)
+                if val == value:
+                    add(eqfmt, value, True)
+                    ops.pop('MaxAdvanced')
+                else:
+                    add(minfmt, value, True)
+
+            elif op == 'OnlyIfAtLeast':
+                # Look-ahead, equal values
+                val = ops.get('OnlyIfNoMoreThan', None)
+                if val == value:
+                    add(ifeqfmt, value)
+                    ops.pop('OnlyIfNoMoreThan')
+
+                # Look-ahead for adjacent values
+                elif val == value + 1:
+                    add(ifadjfmt, None, v1=value, v2=val)
+                    ops.pop('OnlyIfNoMoreThan')
+
+                else:
+                    # Add the string snippet
+                    add(ifminfmt,  value)
+
+            elif op == 'Level':
+                # Integrity check
+                if set(ops) - set((op, 'OnlyIfAtLeast', 'OnlyIfNoMoreThan')):
+                    log.warn("'%s' used with mutually exclusive"
+                             " Quality operators: %r.%r",
+                             op, self.parent, self)
+                qtyopstrs.append(lvlfmt.format(value))
+
+            elif op == 'ChangeByAdvanced':
+                if set(ops) - set((op, 'OnlyIfAtLeast', 'OnlyIfNoMoreThan')):
+                    log.warn("'%s' used with mutually exclusive"
+                             " Quality operators: %r.%r",
+                             op, self.parent, self)
+
+                val = re.sub(r"^[+-]?0+([+-])", "\g<1>", value)
+                if val[:1] not in "+-":
+                    val = lvladvfmt.format(val)
+
+                qtyopstrs.append(self._parse_adv(val, advfmt, dfmt))
+
+            elif op == 'MaxLevel':             add(maxfmt,    value)
+            elif op == 'MaxLevelAdvanced':     add(maxfmt,    value, True)
+            elif op == 'MaxAdvanced':          add(maxfmt,    value, True)
+            elif op == 'OnlyIfNoMoreThan':     add(ifmaxfmt,  value)
+            elif op == 'DifficultyAdvanced':   add(chaadvfmt, value, True)
+            elif op == 'DifficultyLevel':      add(chafmt,    perc(value))
+            elif op == 'SetToExactly':         add(setfmt,    value)
+            elif op == 'SetToExactlyAdvanced': add(setfmt,    value, True)
+
+            else:
+                add(elsefmt, value, adv='Advanced' in op, op=op)
+
+        return format_obj(qfmt,
+                          self.quality,
+                          qsep=iif(posopstrs, qsep),
+                          ops=opsep.join(posopstrs),
+                          qtyops=qtyopsep.join(qtyopstrs),
+        )
 
     def _parse_adv(self, opstr, qfmt="[{name}]", dfmt="[1 to {}]",
                    *args, **kwargs):
@@ -920,9 +1028,7 @@ class QualityOperator(object):
         return result
 
     def __str__(self):
-        return "{qname} {operator}".format(
-            qname    = self.quality.name,
-            operator = self._format_ops(self.operator))
+        return self._format("{name} {ops}")
 
     def __repr__(self):
         return b"<{cls} {id}: {qid} - {qname} {ops}>".format(
@@ -934,19 +1040,17 @@ class QualityOperator(object):
 
 
 class Effect(QualityOperator):
-    pass
-
-class Requirement(QualityOperator):
-    _STR_OP  = dict(
-        DifficultyLevel      = 'challenge',
-        DifficultyAdvanced   = 'challenge',
-        MinLevel             = '≥',
-        MinAdvanced          = '≥',
-        MaxLevel             = '≤',
-        MaxAdvanced          = '≤',
+    _OPS = (
+        'Level',
+        'ChangeByAdvanced',
+        'SetToExactly',
+        'SetToExactlyAdvanced',
+        'OnlyIfAtLeast',
+        'OnlyIfNoMoreThan',
     )
 
-    # Order IS relevant, hence a list
+
+class Requirement(QualityOperator):
     _OPS = (
         'DifficultyLevel',
         'DifficultyAdvanced',
@@ -955,83 +1059,6 @@ class Requirement(QualityOperator):
         'MaxLevel',
         'MaxAdvanced',
     )
-
-    def _format(self,
-            qfmt="{name} {ops}",
-            dfmt="[1 to {}]",
-            advfmt="[{name}]",
-            eqfmt ="== {}",
-            adjfmt="== {} or {}",
-            minfmt="≥ {}",
-            maxfmt="≤ {}",
-            chafmt="challenge ({} for 100%)",
-            advchafmt="challenge {}",
-            opsep=" and "):
-        # quality challenge (80%) and >1 and > dsd and < asas and < dsds
-
-
-        def add(fmt, val, adv=False, *args):
-            opstrs.append(fmt.format((self._parse_adv(val, advfmt, dfmt)
-                                      if adv else val),
-                                     *args))
-
-        def perc(val):
-            return (int(100.0 * val / self.quality.difficultyscaler)
-                    if val and self.quality.difficultyscaler
-                    else 'X')
-
-        ops = self.operator.copy()
-        opstrs = []
-
-        # Loop in _OPS to preserve order
-        for op in self._OPS:
-            if not op in ops:
-                continue
-
-            value = ops[op]
-
-            if op == 'MinLevel':
-                # Look-ahead for MaxLevel, to combine '> x and < x' into '== x'
-                val = ops.get('MaxLevel', None)
-                if val == value:
-                    add(eqfmt, value)
-                    ops.pop('MaxLevel')
-
-                # Look-ahead for adjacent values, combine into '== x or y'
-                elif val == value + 1:
-                    add(adjfmt, value, False, val)
-                    ops.pop('MaxLevel')
-
-                else:
-                    # Add the string snippet
-                    add(minfmt, value)
-
-            elif op == 'MinAdvanced':
-                val = ops.get('MaxAdvanced', None)
-                if val == value:
-                    add(eqfmt, value, True)
-                    ops.pop('MaxAdvanced')
-                else:
-                    add(minfmt, value, True)
-
-            elif op == 'MaxLevel':           add(maxfmt,    value)
-            elif op == 'MaxLevelAdvanced':   add(maxfmt,    value, True)
-            elif op == 'DifficultyAdvanced': add(advchafmt, value, True)
-            elif op == 'DifficultyLevel':    add(chafmt,    perc(value))
-
-        return format_obj(qfmt, self.quality, ops=opsep.join(opstrs))
-
-    def pretty(self):
-        return self._format("{id} - {name} {ops}")
-
-    def wiki(self):
-        return self._format("{{{{link icon|{name}}}}} {ops}",
-            advfmt='([[{name}]])',
-            chafmt="challenge ({{{{action|{}}}}} for 100%)",
-            advchafmt='challenge:<br>\n:<span style="color: teal;">[{}]</span>')
-
-    def __str__(self):
-        return self._format("{name} {ops}")
 
 
 class SunlessSea(object):
