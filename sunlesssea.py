@@ -411,11 +411,6 @@ class Location(Entity):
 class BaseEvent(Entity):
     '''Base class for Event, Action and Effect, as they have a very similar format'''
 
-    _OUTCOME_TYPES = ('DefaultEvent',
-                     'RareDefaultEvent',
-                     'SuccessEvent',
-                     'RareSuccessEvent')
-
     _OPTIONAL_FIELDS = set((
         "Name",
         "Description",
@@ -574,14 +569,21 @@ class Event(BaseEvent):
 
 
 class Action(BaseEvent):
+    # Order is VERY important, hence tuple
+    _OUTCOME_TYPES = ('DefaultEvent',
+                     'RareDefaultEvent',
+                     'SuccessEvent',
+                     'RareSuccessEvent')
+
     _REQUIRED_FIELDS = set((
         "QualitiesRequired",
-        'ParentEvent'
+        'ParentEvent',
+        'DefaultEvent',
     ))
     _OPTIONAL_FIELDS = (
         set(BaseEvent._OPTIONAL_FIELDS) |
-        set(BaseEvent._OUTCOME_TYPES)   |
-        set(_+"Chance" for _ in BaseEvent._OUTCOME_TYPES)
+        set(_OUTCOME_TYPES[1:])         |
+        set(_+"Chance" for _ in _OUTCOME_TYPES)
     )
     _IGNORED_FIELDS = set((
         'ActionCost',
@@ -598,23 +600,18 @@ class Action(BaseEvent):
         super(Action, self).__init__(data=data, idx=idx, parent=parent, ss=ss)
 
         self.outcomes = []
-        failed = 'SuccessEvent' in self._data
-        for item in self._OUTCOME_TYPES:
-            if item in self._data:
-                self.outcomes.append(Outcome(
-                     data      = self._data[item],
-                     parent    = self,
-                     ss        = self.ss,
-                     otype     = item,
-                     chance    = self._data.get(item + 'Chance', None),
-                     label     = self._outcome_label(item, failed)))
+        self.canfail = 'SuccessEvent' in self._data
 
-        # Integrity checks
-        if not self.outcomes:
-            log.warn("%r has no outcomes!", self)
-        elif self.outcomes[0].type != self._OUTCOME_TYPES[0]:
-            log.warn("%r first outcome is not '%s': '%s'",
-                     self, self._OUTCOME_TYPES[0], self.outcomes[0].type)
+        for i, item in enumerate((_ for _ in self._OUTCOME_TYPES
+                                  if _ in self._data), 1):
+            self.outcomes.append(Outcome(
+                 data      = self._data[item],
+                 idx       = i,
+                 parent    = self,
+                 ss        = self.ss,
+                 otype     = item,
+                 chance    = self._data.get(item + 'Chance', None),
+                 label     = self._outcome_label(item)))
 
     @property
     def gamenote(self):
@@ -632,26 +629,66 @@ class Action(BaseEvent):
         return pretty
 
     def wikirow(self):
-        note = self.gamenote
-        return '''|-
-            | {name}
-            |
-            <ul>
-            {reqs}
-            </ul>
-            | {outs}
-            |{note}
-        '''.replace(4 * " ", "").format(
+        outcomes = len(self.outcomes)
+        rows = 2 * outcomes - (0 if self.canfail else 1)
+        rowspan = iif(rows > 1, '| rowspan="{}"              '.format(rows))
+        note = self.gamenote  # save to avoid multiple calls to property
+
+        def innerheader(outcome):
+            return ("| {{{{style inner header{rare} "
+                    "| {label} event{chance}\n"
+            ).format(
+                label  = outcome.label.replace(" Default", ""),         # lame
+                rare   = iif("Rare" in outcome.label, "|*}}", "}}  "),  # lamer
+                chance = iif(outcome.chance, " ({}% chance)".format(outcome.chance)),
+            )
+
+        def innercell(outcome):
+            return "|{}{}{}\n".format(
+                iif(outcome.idx < outcomes, " {{style inner cell}}     |"),
+                iif(outcome.name, " ", "\n"),
+                outcome.wiki(),
+            )
+
+        outcome = self.outcomes[0]
+        if self.canfail:
+            firstrow  = innerheader(self.outcomes[0])
+            secondrow = "|-\n{}".format(innercell(outcome))
+        else:
+            firstrow = innercell(self.outcomes[0])
+            secondrow = ""
+
+        page = (
+            "|-\n"
+            "{rowspan}| {name}\n"
+            "{rowspan}|\n"
+            "<ul>\n"
+            "{reqs}<p></p>\n"
+            "</ul>\n"
+            "{firstrow}"  # firstrow always contains trailing '\n'
+            "{rowspan}|{note}\n"
+        ).format(
             name=self.name,
             reqs="<p></p>\n".join(_.wiki() for _ in self.requirements) or "-",
-            outs="\n<br>\n".join(_.wiki() for _ in self.outcomes) or "-",
-            note=iif(note, " {{{{game note|{}}}}}".format(note))
+            note=iif(note, " {{{{game note|{}}}}}".format(note)),
+            rowspan=rowspan,
+            firstrow=firstrow,
         )
 
-    def _outcome_label(self, otype, failed):
+        page += secondrow
+
+        for outcome in self.outcomes[1:]:
+            page += "|-\n{}|-\n{}".format(innerheader(outcome),
+                                            innercell(outcome))
+
+        return page
+
+    def _outcome_label(self, otype):
         label = otype
         for sfrom, sto in (self._outcome_label_replaces +
-                           (self._outcome_label_failed if failed else ())):
+                           (self._outcome_label_failed
+                            if self.canfail
+                            else ())):
             label = label.replace(sfrom, sto)
         return label
 
@@ -681,10 +718,10 @@ class Outcome(BaseEvent):
         self.trigger = self._data.get('LinkToEvent', {}).get('Id', None)
 
     def pretty(self):
-        pretty = "{} Outcome{}:\n{}\n".format(self.label,
-                                      " {}%".format(self.chance)
-                                            if self.chance else "",
-                                      indent(super(Outcome, self).pretty(), 1))
+        pretty = "{} Outcome{}:\n{}\n".format(
+            self.label,
+            iif(self.chance, " ({}% chance)".format(self.chance)),
+            indent(super(Outcome, self).pretty(), 1))
 
         if self.trigger:
             pretty += "\t\tTrigger event: {} - {}\n".format(self.trigger.id,
@@ -693,14 +730,9 @@ class Outcome(BaseEvent):
         return pretty
 
     def wiki(self):
-        page = (
-            "{label} event{chance}<br>{name}\n"
-            "<ul>\n"
-        ).format(
-            chance = iif(self.chance, " ({}%)".format(self.chance)),
-            label  = self.label,
-            name   = iif(self.name, "{{{{effect title|{}}}}}".format(self.name)),
-        )
+        page = iif(self.name, "{{{{effect title|{}}}}}\n".format(self.name), "")
+        page += "<ul>\n"
+
         for effect in self.effects:
             page += "{}<p></p>\n".format(effect.wiki())
 
