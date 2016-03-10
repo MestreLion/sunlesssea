@@ -200,9 +200,10 @@ def main(argv=None):
         return
 
     # Testing area..
-    event = ss.events.get(208079)
-    safeprint(event.pretty())
+    #event = ss.events.get(208079)
+    #safeprint(event.pretty())
     #safeprint(event.wikipage())
+    safeprint(ss.events.wikitable())
 
 
 
@@ -280,8 +281,11 @@ class Entity(object):
             "| {id}\n"
             "| [[{name}]]\n"
             "| {{{{game icon|{image}}}}}\n"
-            "| <nowiki>{description}</nowiki>\n",
-            self)
+            "| {description}\n",
+            self, description=self._parse_adv(
+                "\n".join(_.strip() for _ in
+                          self.description.replace("\r","").split('\n')),
+                qnamefmt="[q:[[{}]]]"))
 
     def wikipage(self):
         return format_obj(
@@ -297,8 +301,8 @@ class Entity(object):
         # repr() quotes and fixes \n, \r, but must get rid of 'u' prefix
         return repr(text)[1:]
 
-    def _parse_adv(self, opstr, qfmt="[{name}]", dfmt="[1 to {}]",
-                   noqfmt="[Quality({})]", qnamefmt="[<{}>]"):
+    def _parse_adv(self, text, qfmt="[{name}]", dfmt="[1 to {}]",
+                   noqfmt="[Quality({})]", qnamefmt="{{{}}}"):
         '''
         Parse "Advanced" strings containing references to entities in [k:v] format
 
@@ -328,8 +332,8 @@ class Entity(object):
                         is actually performed, '{}' for the name content.
         '''
 
-        result = opstr
-        for match in re.finditer(self._re_adv, opstr):
+        result = text
+        for match in re.finditer(self._re_adv, text):
             mstr, (key, value) = match.group(), match.group('key', 'value')
             subst = None
             quality = None
@@ -345,7 +349,7 @@ class Entity(object):
                     else:
                         subst = noqfmt.format(value)
                         log.warning("Could not find Quality ID %s for %r in %r",
-                                    value, self, opstr)
+                                    value, self, text)
                 # By name
                 else:
                     subst = qnamefmt.format(value)
@@ -357,7 +361,7 @@ class Entity(object):
 
             else:
                 log.warn("Unknown %r key when parsing advanced string: %r",
-                         key, opstr)
+                         key, text)
 
             if subst:
                 result = result.replace(mstr, subst, 1)
@@ -373,8 +377,8 @@ class Entity(object):
             return b"<{} {:d}>".format(self.__class__.__name__,
                                        self.id)
 
-    def __str__(self):
-        return self.name if self.name else repr(self)
+    def __unicode__(self):
+        return self.name if self.name else unicode(repr(self))
 
 
 class Quality(Entity):
@@ -684,7 +688,7 @@ class Action(BaseEvent):
 
     @property
     def gamenote(self):
-        match = re.search(self._re_gamenote, self.description)
+        match = re.search(self._re_gamenote, self.description.strip())
         if match:
             return match.group(1)
         return ""
@@ -737,7 +741,7 @@ class Action(BaseEvent):
             "{firstrow}"  # firstrow always contains leading '|' and trailing '\n'
             "{rowspan}|{note}\n"
         ).format(
-            name=self.name,
+            name=self._parse_adv(self.name, qnamefmt="[q:[[{}]]]"),
             reqs="<p></p>\n".join(_.wiki() for _ in self.requirements) or "-",
             note=iif(note, " {{{{game note|{}}}}}".format(note)),
             rowspan=rowspan,
@@ -891,7 +895,7 @@ class Entities(object):
     def __len__(self):
         return len(self._entities)
 
-    def __str__(self):
+    def __unicode__(self):
         return "<{}: {:d}>".format(self.__class__.__name__,
                                    len(self._entities))
 
@@ -1121,7 +1125,7 @@ class QualityOperator(Entity):
                           qtyops=qtyopsep.join(qtyopstrs),
         )
 
-    def __str__(self):
+    def __unicode__(self):
         return self._format()
 
     def __repr__(self):
