@@ -222,6 +222,8 @@ class Entity(object):
     _OPTIONAL_FIELDS  = set()  # Converted to attributes using default values
     _IGNORED_FIELDS   = set()  # No attributes created
 
+    _re_gamenote = re.compile('\[([^\]]+)]"?$')
+
     def __init__(self, data, idx=0, ss=None):
         self._data = data
         self.idx   = idx
@@ -550,7 +552,7 @@ class Event(BaseEvent):
             '\n\n'
             '----\n'
             '===Interactions===\n'
-            '{| class="ss-table sortable" style="width: 100%;"\n'
+            '{| class="ss-table" style="width: 100%;"\n'
             '! style="width:10%;" | Interaction\n'
             '! style="width:20%;" | Unlocked by\n'
             '! style="width:20%;" | Effects\n'
@@ -610,9 +612,9 @@ class Action(BaseEvent):
 
     @property
     def gamenote(self):
-        note = re.search(r'\[([^\]]*)\]', self.description)
-        if note:
-            return note.group(1)
+        match = re.search(self._re_gamenote, self.description)
+        if match:
+            return match.group(1)
         return ""
 
     def pretty(self):
