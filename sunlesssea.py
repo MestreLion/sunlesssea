@@ -62,7 +62,7 @@ elif sys.platform == "win32":
 else:
     DATADIR="."  # and pray for the best...
 
-
+TEST_INTEGRITY = False
 
 
 ####################################################################################
@@ -236,7 +236,8 @@ class Entity(object):
         self.image       = (self._data.get('Image', None) or
                             self._data.get('ImageName', ""))  # Locations
 
-        self._test_integrity()
+        if TEST_INTEGRITY:
+            self._test_integrity()
 
     def _test_integrity(self):
         fields = set(self._data)
@@ -502,7 +503,9 @@ class BaseEvent(Entity):
         if parent:
             self.parent = parent
 
-        # Sanity checks
+        # Integrity checks
+        if not TEST_INTEGRITY:
+            return
 
         if 'ParentEvent' in self._data:
             iid = self._data['ParentEvent']['Id']
@@ -955,12 +958,12 @@ class QualityOperator(Entity):
             log.warning("Could not find Quality for %r: %d",
                         parent, qid)
 
-        # Integrity checks
-        ops = set(self.operator) - self._HIDE_OP
-        if not ops:
-            return  # temporarily disable the warning, 2 occurrences
-            log.error("No relevant operators in %r.%r",
-                     self.parent, self)
+        # Integrity check
+        if TEST_INTEGRITY:
+            ops = set(self.operator) - self._HIDE_OP
+            if not ops:
+                log.error("No relevant operators in %r.%r",
+                         self.parent, self)
 
     def pretty(self):
         return self._format("{id} - {name}{sep}{ops}{ifsep}{ifs}",
@@ -1151,11 +1154,12 @@ class Effect(QualityOperator):
         super(Effect, self).__init__(data=data, idx=idx, parent=parent, ss=ss)
 
         # Integrity check
-        ops = set(self.operator) - self._HIDE_OP - set(('OnlyIfAtLeast',
-                                                        'OnlyIfNoMoreThan'))
-        if len(ops) > 1:
-            log.error("Mutually exclusive operators in %r.%r: %s",
-                      self.parent, self, ops)
+        if TEST_INTEGRITY:
+            ops = set(self.operator) - self._HIDE_OP - set(('OnlyIfAtLeast',
+                                                            'OnlyIfNoMoreThan'))
+            if len(ops) > 1:
+                log.error("Mutually exclusive operators in %r.%r: %s",
+                          self.parent, self, ops)
 
 
 class Requirement(QualityOperator):
