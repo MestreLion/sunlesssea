@@ -80,6 +80,7 @@ def safeprint(text=""):
 
 def format_obj(fmt, obj, *args, **kwargs):
     objdict = {_:getattr(obj, _) for _ in vars(obj) if not _.startswith('_')}
+    objdict.update(dict(str=str(obj), repr=repr(obj)))
     objdict.update(kwargs)
     return unicode(fmt).format(*args, **objdict)
 
@@ -302,10 +303,7 @@ class Entity(object):
                                        self.id)
 
     def __str__(self):
-        if self.name:
-            return "{:d}\t{}".format(self.id, self.name)
-        else:
-            return str(self.id)
+        return self.name if self.name else repr(self)
 
 
 class Quality(Entity):
@@ -861,6 +859,7 @@ class QualityOperator(object):
                     'ForceEquip'))
 
     _reverse = ('Terror', 'Hunger', 'Menaces: Wounds')
+    re_adv = re.compile('\[(?P<key>[a-z]):(?P<value>(?:[^][]+|\[[^][]+])+)]')
 
     def __init__(self, data, parent=None, ss=None):
         self.id       = data['Id']
@@ -876,7 +875,8 @@ class QualityOperator(object):
 
         if not self.quality:
             # Create a dummy one
-            self.quality = Quality(data=data['AssociatedQuality'], ss=self.ss)
+            self.quality = Quality(data={'Id': qid, 'Name':''},
+                                   ss=self.ss)
             log.warning("Could not find Quality for %r: %d",
                         parent, qid)
 
@@ -1049,32 +1049,66 @@ class QualityOperator(object):
         )
 
     def _parse_adv(self, opstr, qfmt="[{name}]", dfmt="[1 to {}]",
-                   *args, **kwargs):
+                   noqfmt="[Quality({})]", qnamefmt="[<{}>]"):
+        '''
+        Parse "Advanced" strings containing references to entities in [k:v] format
+
+        Current references are:
+        [q:ID]   - Quality by ID, return its current value ("Level")
+        [q:NAME] - Quality by name, return LevelDescriptionText for its Level
+        [d:NUM]  - Dice roll, 1 to NUM
+
+        Some very basic nesting is also used, as in:
+        [d:[q:ID]] - Dice roll, 1 to Quality(ID).Level
+
+        No other nestings are found, only combinations and expressions:
+        "[d:[q:108665]] - [d:5] - (100 * [q:112904])"
+
+        Altough not used, this method also supports nesting combos such as:
+        "OK [d:99+[q:102898]+2*[q:112904]+10], [q:123], [q:something], [k:foo]"
+
+        Parameters:
+            opstr: String being searched for references
+            qfmt:     Formatting string for Qualities looked up by ID.
+                        Use Quality attribute names such as '{name}', '{id}'.
+                        '{str}' for str(Quality) and '{repr}' for its repr()
+            dfmt:     Formatting string for dice rolls. '{}' for the value
+            noqfmt:   Formatting string for Quality ID not found in Qualities
+                        '{}' for the ID
+            qnamefmt: Formatting string for Quality name. No Qualities lookup
+                        is actually performed, '{}' for the name content.
+        '''
+
         result = opstr
-        for match in re.finditer(r'\[(?P<key>[^:]+):(?P<value>[^\]]+)\]', opstr):
-            try:
-                mstr, (key, value) = match.group(), match.group('key', 'value')
-            except Exception:
-                print((repr(self), opstr, match))
-                sys.exit()
+        for match in re.finditer(self.re_adv, opstr):
+            mstr, (key, value) = match.group(), match.group('key', 'value')
+            subst = None
+            quality = None
 
-            if   key == 'q':
-                if self.ss and self.ss.qualities:
-                    quality = self.ss.qualities.get(int(value))
+            # Qualities
+            if key == 'q':
+                # By ID
+                if value.isdigit():
+                    if self.ss and self.ss.qualities:
+                        quality = self.ss.qualities.get(int(value))
+                    if quality:
+                        subst = format_obj(qfmt, quality, quality=quality)
+                    else:
+                        subst = noqfmt.format(value)
+                        log.warning("Could not find Quality ID %s for %r.%r in %r",
+                                    value, self.parent, self, opstr)
+                # By name
                 else:
-                    quality = None
-                if not quality:
-                    # Create a dummy one
-                    quality = Quality(data={'Id': int(value)}, ss=self.ss)
-                    log.warning("Could not find Quality for %r.%r: %s",
-                                self.parent, self, mstr)
+                    subst = qnamefmt.format(value)
 
-                subst = format_obj(qfmt, quality, *args, **kwargs)
-
+            # Dice roll
             elif key == 'd':
-                subst = dfmt.format(value)
+                subst = dfmt.format(self._parse_adv(value, qfmt, dfmt,
+                                                    noqfmt, qnamefmt))
+
             else:
-                subst = None
+                log.warn("Unknown %r key when parsing advanced string: %r",
+                         key, opstr)
 
             if subst:
                 result = result.replace(mstr, subst, 1)
