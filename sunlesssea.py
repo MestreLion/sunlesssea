@@ -424,8 +424,9 @@ class BaseEvent(Entity):
         ):
             if key in self._data:
                 setattr(self, attr, [])
-                for item in self._data[key]:
+                for i, item in enumerate(self._data[key], 1):
                     getattr(self, attr).append(cls(data=item,
+                                                   idx=i,
                                                    parent=self,
                                                    ss=self.ss))
 
@@ -846,9 +847,9 @@ class Events(Entities):
                                                          re.IGNORECASE))))))
 
 
-class QualityOperator(object):
+class QualityOperator(Entity):
     '''Base Class for Effects and Requirements
-        Subclasses MUST override _OPS
+        Subclasses MUST override _OPS and _OPTIONAL_FIELDS
     '''
 
     # Order IS relevant, hence a tuple
@@ -860,13 +861,18 @@ class QualityOperator(object):
                     'Priority',
                     'ForceEquip'))
 
-    _reverse = ('Terror', 'Hunger', 'Menaces: Wounds')
-    re_adv = re.compile('\[(?P<key>[a-z]):(?P<value>(?:[^][]+|\[[^][]+])+)]')
+    # To satisfy Entity base class
+    _REQUIRED_FIELDS = {"AssociatedQuality"}
+    _OPTIONAL_FIELDS = set()
+    _IGNORED_FIELDS  = _HIDE_OP
 
-    def __init__(self, data, parent=None, ss=None):
-        self.id       = data['Id']
+    _reverse = ('Terror', 'Hunger', 'Menaces: Wounds')
+    _re_adv = re.compile('\[(?P<key>[a-z]):(?P<value>(?:[^][]+|\[[^][]+])+)]')
+
+    def __init__(self, data, idx=0, parent=None, ss=None):
+        super(QualityOperator, self).__init__(data=data, idx=idx, ss=ss)
+
         self.parent   = parent
-        self.ss       = ss
         self.quality  = None
         self.operator = {_:data[_] for _ in data
                          if _ not in self._NOT_OP}
@@ -888,11 +894,6 @@ class QualityOperator(object):
             return  # temporarily disable the warning, 2 occurrences
             log.error("No relevant operators in %r.%r",
                      self.parent, self)
-
-        ops = ops - set(self._OPS)
-        if ops:
-            log.warn("Unknown operators in %r.%r: %s",
-                     self.parent, self, ", ".join(ops))
 
     def pretty(self):
         return self._format("{id} - {name}{sep}{ops}{ifsep}{ifs}",
@@ -1082,7 +1083,7 @@ class QualityOperator(object):
         '''
 
         result = opstr
-        for match in re.finditer(self.re_adv, opstr):
+        for match in re.finditer(self._re_adv, opstr):
             mstr, (key, value) = match.group(), match.group('key', 'value')
             subst = None
             quality = None
@@ -1121,12 +1122,18 @@ class QualityOperator(object):
         return self._format()
 
     def __repr__(self):
-        return b"<{cls} {id}: {qid} - {qname} {ops}>".format(
-            cls   = self.__class__.__name__,
-            id    = self.id,
-            qid   = self.quality.id,
-            qname = repr(self.quality.name),
-            ops   = repr(self.operator))
+        try:
+            return b"<{cls} {id}: {qid} - {qname} {ops}>".format(
+                cls   = self.__class__.__name__,
+                id    = self.id,
+                qid   = self.quality.id,
+                qname = repr(self.quality.name),
+                ops   = repr(self.operator))
+        except AttributeError:
+            # repr() requested by base class before __init__() finishes
+            return b"<{cls} {id}>".format(
+                cls   = self.__class__.__name__,
+                id    = self.id)
 
 
 class Effect(QualityOperator):
@@ -1138,9 +1145,10 @@ class Effect(QualityOperator):
         'OnlyIfAtLeast',
         'OnlyIfNoMoreThan',
     )
+    _OPTIONAL_FIELDS = QualityOperator._OPTIONAL_FIELDS | set(_OPS)
 
-    def __init__(self, data, parent=None, ss=None):
-        super(Effect, self).__init__(data=data, parent=parent, ss=ss)
+    def __init__(self, data, idx=0, parent=None, ss=None):
+        super(Effect, self).__init__(data=data, idx=idx, parent=parent, ss=ss)
 
         # Integrity check
         ops = set(self.operator) - self._HIDE_OP - set(('OnlyIfAtLeast',
@@ -1159,6 +1167,7 @@ class Requirement(QualityOperator):
         'MaxLevel',
         'MaxAdvanced',
     )
+    _OPTIONAL_FIELDS = QualityOperator._OPTIONAL_FIELDS | set(_OPS)
 
 
 class SunlessSea(object):
