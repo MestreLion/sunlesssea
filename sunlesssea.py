@@ -212,7 +212,7 @@ def main(argv=None):
     #event = ss.events.get(208079)
     #safeprint(event.pretty())
     #safeprint(event.wikipage())
-    safeprint(ss.events.wikitable())
+    #safeprint(ss.events.wikitable())
 
 
 
