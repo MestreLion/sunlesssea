@@ -497,7 +497,15 @@ class BaseEvent(Entity):
         ):
             if key in self._data:
                 setattr(self, attr, [])
+                iids = []  # needed just for the integrity check
                 for i, item in enumerate(self._data[key], 1):
+                    if TEST_INTEGRITY:
+                        iid = item['AssociatedQuality']['Id']
+                        if iid in iids:
+                            log.error('Duplicate quality %d %s for %r',
+                                      iid, attr, self)
+                        else:
+                            iids.append(iid)
                     getattr(self, attr).append(cls(data=item,
                                                    idx=i,
                                                    parent=self,
