@@ -1,0 +1,80 @@
+#!/bin/bash -ue
+#
+#    Copyright (C) 2016 Rodrigo Silva (MestreLion) <linux@rodrigosilva.com>
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program. See <http://www.gnu.org/licenses/gpl.html>
+
+# Copy and "prettify" Sunless Sea JSON files for easy reading and editing
+
+# Note this is just a convenience, as sunlesssea.py by default will still read
+# the original game files
+
+ssdir=${XDG_CONFIG_HOME:-$HOME/.config}/"unity3d/Failbetter Games/Sunless Sea"
+
+if (($# != 1)); then
+	echo "Copy and 'prettify' Sunless Sea JSON files to OUTPUT_DIR"
+	echo "Usage: ${0##*/} <OUTPUT_DIR> [GAME_DIR]"
+	echo "Default game dir: $ssdir"
+	exit
+fi >&2
+
+outdir=$1
+indir=${2:-$ssdir}
+
+# --------
+
+INDENT=1
+
+shopt -s nullglob
+for infile in "$indir"/*/*.json; do
+	dirbase=$(basename "${infile%/*}")
+	outfile=$outdir/$dirbase/${infile##*/}
+
+	# skip files that have an '_import' alternative, use those instead
+	# except for 'constants' dir where *'_import'* are invalid JSON
+	if [[ "$dirbase" = constants ]]; then
+		[[ "${infile##*_}" = import.json ]] && continue
+	else
+		[[ -f "${infile%.*}"_import.json ]] && continue
+	fi
+
+	echo "Saving $outfile" >&2
+	mkdir -p -- "$outdir"/"$dirbase"
+
+	{
+	python - "$infile" <<-EOF
+		import json
+		import sys
+
+		infile = sys.argv[1] if len(sys.argv) > 1 else None
+
+		if infile and not infile == "-":
+		    with open(infile, "r") as fd:
+		        data = json.load(fd, strict=False)
+		else:
+		    data = json.load(sys.stdin, strict=False)
+
+		json.dump(
+		    data,
+		    sys.stdout,
+		    sort_keys=True,
+		    indent=$INDENT,
+		    separators=(",",": ")
+		)
+	EOF
+	} |
+	# sed 's/^ \{4\}//;:loop;s/^\([\t]*\) \{4\}/\1\t/;tloop'
+	unexpand --tabs="$INDENT" --first-only |
+	sed 's/^\t//' > "$outfile"
+done
