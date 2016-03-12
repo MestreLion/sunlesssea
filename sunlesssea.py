@@ -241,8 +241,8 @@ class Entity(object):
         self.ss    = ss
         self.id    = self._data['Id']
 
-        self.name        = self._data.get('Name', "")
-        self.description = self._data.get('Description', "")
+        self.name        = self._data.get('Name', "").strip()
+        self.description = self._data.get('Description', "").strip()
         self.image       = (self._data.get('Image', None) or
                             self._data.get('ImageName', ""))  # Locations
 
@@ -705,7 +705,7 @@ class Action(BaseEvent):
 
     @property
     def gamenote(self):
-        match = re.search(self._re_gamenote, self.description.strip())
+        match = re.search(self._re_gamenote, self.description)
         if match:
             return match.group(1)
         return ""
