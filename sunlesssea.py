@@ -560,13 +560,13 @@ class Event(BaseEvent):
 
     _REQUIRED_FIELDS = set((
         "ChildBranches",
-        'QualitiesRequired'
+        'QualitiesRequired',
+        'QualitiesAffected',
     ))
     _OPTIONAL_FIELDS = BaseEvent._OPTIONAL_FIELDS | set((
         "Autofire",
         'Category',
         'LimitedToArea',
-        'QualitiesAffected'
     ))
     _IGNORED_FIELDS  = set((
         'CanGoBack',
@@ -631,15 +631,31 @@ class Event(BaseEvent):
             '----\n'
             '===Description===\n'
             "''\"{description}\"''\n"
-            '\n\n'
-            '----\n'
-            '===Trigger Conditions===\n'
-            "'''{name}''' is available when all the following conditions are met:\n"
             , self,
             location=self.location.name if self.location else "",
         )
         for item in self.requirements:
             page += '* {}\n'.format(item.wiki())
+
+        if self.requirements:
+            page += (
+                '\n\n'
+                '----\n'
+                '===Trigger Conditions===\n'
+            "'''{name}''' is available when all the following conditions are met:\n"
+            ).format(self.name)
+            for item in self.requirements:
+                page += '* {}\n'.format(item.wiki())
+
+        if self.effects:
+            page += (
+                '\n\n'
+                '----\n'
+                '===Effects===\n'
+                "'''{}''' automatically causes the following effects:\n"
+            ).format(self.name)
+            for item in self.effects:
+                page += '* {}\n'.format(item.wiki())
 
         page += (
             '\n\n'
