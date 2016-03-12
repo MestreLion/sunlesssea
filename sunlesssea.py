@@ -744,7 +744,10 @@ class Requirement(QualityOperator):
 
 
 class BaseEvent(Entity):
-    '''Base class for Event, Action and Effect, as they have a very similar format'''
+    '''
+    Base class for Event, Action and Effect, as they have a very similar format
+        Subclasses SHOULD override or extend _OPTIONAL_FIELDS
+    '''
 
     _OPTIONAL_FIELDS = set((
         "Name",
@@ -752,33 +755,16 @@ class BaseEvent(Entity):
         "Image",
     ))
 
+    _qualop_types = dict(
+        requirements=('QualitiesRequired', Requirement),  # Events and Actions
+        effects=     ('QualitiesAffected', Effect),       # Events and Outcomes
+    )
+
     def __init__(self, data, idx=0, parent=None, ss=None):
         super(BaseEvent, self).__init__(data=data, idx=idx, ss=ss)
 
-        # Requirements and Effects
-        for key, attr, cls in (
-            ('QualitiesRequired', 'requirements', Requirement),  # Only Events and Actions
-            ('QualitiesAffected', 'effects',      Effect),       # Only Events and Outcomes
-        ):
-            if key in self._data:
-                setattr(self, attr, [])
-                iids = []  # needed just for the integrity check
-                for i, item in enumerate(self._data[key], 1):
-                    if TEST_INTEGRITY:
-                        iid = item['AssociatedQuality']['Id']
-                        if iid in iids:
-                            log.error('Duplicate quality %d %s for %r',
-                                      iid, attr, self)
-                        else:
-                            iids.append(iid)
-                    getattr(self, attr).append(cls(data=item,
-                                                   idx=i,
-                                                   parent=self,
-                                                   ss=self.ss))
-
         # Only Actions and Outcomes
-        if parent:
-            self.parent = parent
+        self.parent = parent
 
         # Integrity checks
         if not TEST_INTEGRITY:
@@ -809,6 +795,19 @@ class BaseEvent(Entity):
                 pretty += "{}\n".format(indent(item.pretty(), 2))
 
         return pretty
+
+    def _create_qualops(self, attr):
+        key, cls = self._qualop_types[attr]
+        iids = []  # needed just for the integrity check
+        for i, item in enumerate(self._data[key], 1):
+            if TEST_INTEGRITY:
+                iid = item['AssociatedQuality']['Id']
+                if iid in iids:
+                    log.error('Duplicate quality %d in %s for %r',
+                              iid, attr, self)
+                else:
+                    iids.append(iid)
+            yield cls(data=item, idx=i, parent=self, ss=self.ss)
 
 
 class Event(BaseEvent):
@@ -852,6 +851,9 @@ class Event(BaseEvent):
             if not self.location:
                 log.warning("Could not find Location for %r: %d", self, iid)
                 self.location = Location(self._data['LimitedToArea'])
+
+        self.requirements = list(self._create_qualops('requirements'))
+        self.effects      = list(self._create_qualops('effects'))
 
         self.actions = []
         for i, item in enumerate(self._data.get('ChildBranches', []), 1):
@@ -961,9 +963,10 @@ class Action(BaseEvent):
     def __init__(self, data, idx=0, parent=None, ss=None):
         super(Action, self).__init__(data=data, idx=idx, parent=parent, ss=ss)
 
-        self.outcomes = []
-        self.canfail = 'SuccessEvent' in self._data
+        self.requirements = list(self._create_qualops('requirements'))
+        self.canfail      = 'SuccessEvent' in self._data
 
+        self.outcomes = []
         for i, item in enumerate((_ for _ in self._OUTCOME_TYPES
                                   if _ in self._data), 1):
             self.outcomes.append(Outcome(
@@ -1078,6 +1081,7 @@ class Outcome(BaseEvent):
         self.chance  = chance
         self.label   = label
         self.trigger = self._data.get('LinkToEvent', {}).get('Id', None)
+        self.effects = list(self._create_qualops('effects'))
 
     def pretty(self):
         pretty = "{} Outcome{}:\n{}\n".format(
