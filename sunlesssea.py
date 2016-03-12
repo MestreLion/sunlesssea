@@ -62,6 +62,7 @@ elif sys.platform == "win32":
 else:
     DATADIR="."  # and pray for the best...
 
+# Changed by main() on command-line args
 TEST_INTEGRITY = False
 
 
@@ -122,6 +123,12 @@ def parse_args(argv=None):
                        action="store_const",
                        help="Verbose mode, output extra info.")
 
+    group.add_argument('-c', '--check',
+                       dest='check',
+                       action="store_true",
+                       default=False,
+                       help="Verbose mode, output extra info.")
+
     parser.add_argument('-d', '--datadir',
                         dest='datadir',
                         default=DATADIR,
@@ -156,10 +163,12 @@ def parse_args(argv=None):
 
 
 def main(argv=None):
+    global TEST_INTEGRITY
     args = parse_args(argv or [])
     logging.basicConfig(level=args.loglevel,
                         format='%(levelname)s: %(message)s')
     log.debug(args)
+    TEST_INTEGRITY = args.check
 
     ss = SunlessSea(args.datadir)
 
