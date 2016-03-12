@@ -30,7 +30,8 @@
 # - read text statuses on numeric quality assignments/tests
 #    so "QualityX := 3" => "QualityX := 3, [3's Status Description]"
 #    or even "Description" (think about SAY)
-
+# - Improve (or even completely deprecate) format_obj using better .format()
+#    specs and ideas from http://code.activestate.com/recipes/577227/
 
 from __future__ import unicode_literals, print_function
 
@@ -873,65 +874,66 @@ class Event(BaseEvent):
         return pretty
 
     def wikipage(self):
-        page = format_obj(
-            '=={name}==\n'
+        linked, inloc = (
+            '|linked       = {{{{link icon|{.location}}}}}\n'.format(self),
+            " in [[{.location}]]".format(self),
+        ) if self.location else ("", "")
+
+        header=(
+            '=={self.name}==\n'
             '{{{{Infobox story\n'
-            '|name         = {name}\n'
-            '|image        = SS {image}gaz.png\n'
-            '|id           = {id}\n'
+            '|name         = {self.name}\n'
+            '|image        = SS {self.image}gaz.png\n'
+            '|id           = {self.id}\n'
             '|px           = 260px\n'
-            '|category     = {category}\n'
+            '|category     = {self.category}\n'
 #            '|type         = [[Story Event#Pigmote Isle|Pigmote Isle]]'
-            '|linked       = {{{{link icon|{location}}}}}\n'
+            '{linked}'
             '}}}}\n'
-            "'''{name}''' is a [[Sunless Sea]] [[Story Event]] in [[{location}]]\n"
-            '\n\n'
-            '----\n'
+            "'''{self.name}''' is a [[Sunless Sea]] [[Story Event]]{inloc}"
+        ).format(**locals())
+
+        description=(
             '===Description===\n'
-            "''\"{description}\"''\n"
-            , self,
-            location=self.location.name if self.location else "",
-        )
-        for item in self.requirements:
-            page += '* {}\n'.format(item.wiki())
+            "''\"{.description}\"''"
+        ).format(self) if self.description else ""
 
-        if self.requirements:
-            page += (
-                '\n\n'
-                '----\n'
-                '===Trigger Conditions===\n'
-            "'''{name}''' is available when all the following conditions are met:\n"
-            ).format(self.name)
-            for item in self.requirements:
-                page += '* {}\n'.format(item.wiki())
+        requirements=(
+            '===Trigger Conditions===\n'
+            "'''{}''' requires all the following conditions:"
+            ).format(self) + "".join(
+            '\n* {}'
+            .format(_.wiki()) for _ in self.requirements
+        ) if self.requirements else ""
 
-        if self.effects:
-            page += (
-                '\n\n'
-                '----\n'
-                '===Effects===\n'
-                "'''{}''' automatically causes the following effects:\n"
-            ).format(self.name)
-            for item in self.effects:
-                page += '* {}\n'.format(item.wiki())
+        effects=(
+            '===Effects===\n'
+            "'''{}''' automatically causes the following effects:"
+            ).format(self) + "".join(
+            '\n* {}'
+            .format(_.wiki()) for _ in self.requirements
+        ) if self.effects else ""
 
-        if self.actions:
-            page += (
-                '\n\n'
-                '----\n'
-                '===Interactions===\n'
-                '{| class="ss-table" style="width: 100%;"\n'
-                '! style="width:10%;" | Interaction\n'
-                '! style="width:20%;" | Unlocked by\n'
-                '! style="width:20%;" | Effects\n'
-                '! style="width:10%;" | Notes\n'
-                '\n'
-            )
-            page += "\n".join((_.wikirow() for _ in self.actions))
+        actions = (
+            '===Interactions===\n'
+            '{{| class="ss-table" style="width: 100%;"\n'
+            '! style="width:10%;" | Interaction\n'
+            '! style="width:20%;" | Unlocked by\n'
+            '! style="width:20%;" | Effects\n'
+            '! style="width:10%;" | Notes\n'
+            '\n'
+            '{}\n'
+            '|-\n|}}'
+            .format("\n".join(_.wikirow() for _ in self.actions))
+        ) if self.actions else ""
 
-        page += '\n|-\n|}'
-
-        return page
+        return "\n\n\n----\n".join(filter(None, (
+            header,
+            description,
+            requirements,
+            effects,
+            actions,
+        )))
 
 
 class Action(BaseEvent):
@@ -1158,10 +1160,7 @@ class Entities(object):
         return table
 
     def wikipage(self):
-        page = ('')
-        page += "\n\n".join((_.wikipage() for _ in self))
-        page += ''
-        return page
+        return "\n\n\n".join(_.wikipage().strip() for _ in self)
 
     def dump(self):
         return "\n".join((_.dump() for _ in self))
