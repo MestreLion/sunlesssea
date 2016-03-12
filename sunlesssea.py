@@ -915,18 +915,20 @@ class Event(BaseEvent):
             for item in self.effects:
                 page += '* {}\n'.format(item.wiki())
 
-        page += (
-            '\n\n'
-            '----\n'
-            '===Interactions===\n'
-            '{| class="ss-table" style="width: 100%;"\n'
-            '! style="width:10%;" | Interaction\n'
-            '! style="width:20%;" | Unlocked by\n'
-            '! style="width:20%;" | Effects\n'
-            '! style="width:10%;" | Notes\n'
-            '\n'
-        )
-        page += "\n".join((_.wikirow() for _ in self.actions))
+        if self.actions:
+            page += (
+                '\n\n'
+                '----\n'
+                '===Interactions===\n'
+                '{| class="ss-table" style="width: 100%;"\n'
+                '! style="width:10%;" | Interaction\n'
+                '! style="width:20%;" | Unlocked by\n'
+                '! style="width:20%;" | Effects\n'
+                '! style="width:10%;" | Notes\n'
+                '\n'
+            )
+            page += "\n".join((_.wikirow() for _ in self.actions))
+
         page += '\n|-\n|}'
 
         return page
