@@ -390,6 +390,9 @@ class Entity(object):
     def __unicode__(self):
         return self.name if self.name else unicode(repr(self))
 
+    def __str__(self):
+        return self.__unicode__().encode('utf-8')
+
 
 class Quality(Entity):
     _REQUIRED_FIELDS = {'Name'}
