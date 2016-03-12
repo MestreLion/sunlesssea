@@ -487,6 +487,262 @@ class Location(Entity):
         return pretty
 
 
+class QualityOperator(Entity):
+    '''Base Class for Effects and Requirements
+        Subclasses MUST override _OPS and _OPTIONAL_FIELDS
+    '''
+
+    # Order IS relevant, hence a tuple
+    _OPS = ()
+
+    _NOT_OP  = set(('AssociatedQuality', 'Id'))
+    _HIDE_OP = set(('VisibleWhenRequirementFailed',
+                    'BranchVisibleWhenRequirementFailed',
+                    'Priority',
+                    'ForceEquip'))
+
+    # To satisfy Entity base class
+    _REQUIRED_FIELDS = {"AssociatedQuality"}
+    _OPTIONAL_FIELDS = set()
+    _IGNORED_FIELDS  = _HIDE_OP
+
+    _reverse = ('Terror', 'Hunger', 'Menaces: Wounds')
+
+    def __init__(self, data, idx=0, parent=None, ss=None):
+        super(QualityOperator, self).__init__(data=data, idx=idx, ss=ss)
+
+        self.parent   = parent
+        self.quality  = None
+        self.operator = {_:data[_] for _ in data
+                         if _ not in self._NOT_OP}
+
+        qid = data['AssociatedQuality']['Id']
+        if self.ss and self.ss.qualities:
+            self.quality = self.ss.qualities.get(qid)
+
+        if not self.quality:
+            # Create a dummy one
+            self.quality = Quality(data={'Id': qid, 'Name':''},
+                                   ss=self.ss)
+            log.warning("Could not find Quality for %r: %d",
+                        parent, qid)
+
+        # Integrity check
+        if TEST_INTEGRITY:
+            ops = set(self.operator) - self._HIDE_OP
+            if not ops:
+                log.error("No relevant operators in %r.%r",
+                         self.parent, self)
+
+    def pretty(self):
+        return self._format("{id} - {name}{sep}{ops}{ifsep}{ifs}",
+                            "{id} - {name} += {qtyops}{ifsep}{ifs}",
+                            "{id} - {name} += ({qtyops}){ifsep}{ifs}")
+
+    def wiki(self):
+        return self._format(
+            "{{{{link icon|{name}}}}}{sep}{ops}{ifsep}{ifs}",
+            "{{{{link qty|{qtyops}|{name}}}}}{ifsep}{ifs}",
+            "{{{{link qty|{qtyops}|{name}||*}}}}{ifsep}{ifs}",
+            lvlfmt="{:+d}",
+            lvladvfmt="+{}",
+            advfmt='([[{name}]])',
+            chafmt="challenge ({{{{action|{}}}}} for 100%)",
+            chaadvfmt=('challenge:<br>\n:<span style="color: teal;">'
+                       '[{diff}]*100/{scaler}</span> for 100%'))
+
+    def _format(self,
+            # Defaults are suitable for __str__()
+            qfmt="{name}{sep}{ops}{ifsep}{ifs}",
+            qfmtqty="{name} += {qtyops}{ifsep}{ifs}",
+            qfmtrev="{name} += ({qtyops}){ifsep}{ifs}",
+            dfmt="[1 to {}]",
+            advfmt="[{name}]",
+            lvlfmt="{:d}",
+            lvladvfmt="{}",
+            setfmt="= {}",  # ":= {}"
+            eqfmt ="= {}",  # "== {}"
+            adjfmt="= {v1} or {v2}",  # "== {v1} or {v2}"
+            minfmt="≥ {}",
+            maxfmt="≤ {}",
+            ifminfmt="≥ {}",  # "if ≥ {}"
+            ifmaxfmt="≤ {}",  # "if ≤ {}"
+            ifeqfmt="= {}",  # "if == {}"
+            ifadjfmt="= {v1} or {v2}",  # "if == {v1} or {v2}"
+            elsefmt="{op}: {}",
+            chafmt="challenge ({} for 100%)",
+            chaadvfmt="challenge: ({diff})*100/{scaler}",
+            opsep=" and ",
+            qtyopsep=" + ",
+            ifsep=", only if ",
+            sep=" "):
+
+        def add(fmt, value, adv=False, *args, **kwargs):
+            posopstrs.append(fmt.format((self._parse_adv(str(value),
+                                                         advfmt,
+                                                         dfmt)
+                                         if adv else value),
+                                        *args, **kwargs))
+
+        def perc(val):
+            return (int(math.ceil(100.0 * val / self.quality.difficultyscaler))
+                    if val and self.quality.difficultyscaler
+                    else 'X')
+
+        ops = {_:self.operator[_]
+               for _ in self.operator
+               if _ not in self._HIDE_OP}
+        posopstrs = []
+        qtyopstrs = []
+        ifopstrs  = []
+        useqty = False  # ('Level' in ops or 'ChangeByAdvanced' in ops)
+
+        # Loop in _OPS to preserve order
+        for op in self._OPS:
+            if op not in ops:
+                continue
+
+            value = ops[op]
+
+            if op == 'MinLevel':
+                # Look-ahead for MaxLevel, to combine '> x and < x' into '== x'
+                val = ops.get('MaxLevel', None)
+                if val == value:
+                    add(eqfmt, value)
+                    ops.pop('MaxLevel')
+
+                # Look-ahead for adjacent values, combine into '== x or y'
+                elif val == value + 1:
+                    add(adjfmt, None, v1=value, v2=val)
+                    ops.pop('MaxLevel')
+
+                else:
+                    # Add the string snippet
+                    add(minfmt, value)
+
+            elif op == 'MinAdvanced':
+                # Look-ahead for equal values
+                val = ops.get('MaxAdvanced', None)
+                if val == value:
+                    add(eqfmt, value, True)
+                    ops.pop('MaxAdvanced')
+                else:
+                    add(minfmt, value, True)
+
+            elif op == 'OnlyIfAtLeast':
+                # Look-ahead, equal values
+                val = ops.get('OnlyIfNoMoreThan', None)
+                if val == value:
+                    ifopstrs.append(ifeqfmt.format(value))
+                    ops.pop('OnlyIfNoMoreThan')
+
+                # Look-ahead for adjacent values
+                elif val == value + 1:
+                    ifopstrs.append(ifadjfmt.format(v1=value, v2=val))
+                    ops.pop('OnlyIfNoMoreThan')
+
+                else:
+                    # Add the string snippet
+                    ifopstrs.append(ifminfmt.format(value))
+
+            elif op == 'OnlyIfNoMoreThan':
+                ifopstrs.append(ifmaxfmt.format(value))
+
+            elif op == 'Level':
+                useqty = True
+                qtyopstrs.append(lvlfmt.format(value))
+
+            elif op == 'ChangeByAdvanced':
+                useqty = True
+                val = re.sub(r"^[+-]?0+([+-])", "\g<1>", value)
+                if val[:1] not in "+-":
+                    val = lvladvfmt.format(val)
+
+                qtyopstrs.append(self._parse_adv(val, advfmt, dfmt))
+
+            elif op == 'DifficultyAdvanced':
+                posopstrs.append(chaadvfmt.format(
+                    diff=self._parse_adv(value, advfmt, dfmt),
+                    scaler=self.quality.difficultyscaler))
+
+            elif op == 'MaxLevel':             add(maxfmt,    value)
+            elif op == 'MaxLevelAdvanced':     add(maxfmt,    value, True)
+            elif op == 'MaxAdvanced':          add(maxfmt,    value, True)
+            elif op == 'DifficultyLevel':      add(chafmt,    perc(value))
+            elif op == 'SetToExactly':         add(setfmt,    value)
+            elif op == 'SetToExactlyAdvanced': add(setfmt,    value, True)
+
+            else:
+                add(elsefmt, value, adv='Advanced' in op, op=op)
+
+        if useqty:
+            if self.quality.name in self._reverse:
+                qfmt = qfmtrev
+            else:
+                qfmt = qfmtqty
+
+        return format_obj(qfmt,
+                          self.quality,
+                          sep=iif(posopstrs, sep),
+                          ifsep=iif(ifopstrs, ifsep),
+                          ifs=opsep.join(ifopstrs),
+                          ops=opsep.join(posopstrs),
+                          qtyops=qtyopsep.join(qtyopstrs),
+        )
+
+    def __unicode__(self):
+        return self._format()
+
+    def __repr__(self):
+        try:
+            return b"<{cls} {id}: {qid} - {qname} {ops}>".format(
+                cls   = self.__class__.__name__,
+                id    = self.id,
+                qid   = self.quality.id,
+                qname = repr(self.quality.name),
+                ops   = repr(self.operator))
+        except AttributeError:
+            # repr() requested by base class before __init__() finishes
+            return b"<{cls} {id}>".format(
+                cls   = self.__class__.__name__,
+                id    = self.id)
+
+
+class Effect(QualityOperator):
+    _OPS = (
+        'Level',
+        'ChangeByAdvanced',
+        'SetToExactly',
+        'SetToExactlyAdvanced',
+        'OnlyIfAtLeast',
+        'OnlyIfNoMoreThan',
+    )
+    _OPTIONAL_FIELDS = QualityOperator._OPTIONAL_FIELDS | set(_OPS)
+
+    def __init__(self, data, idx=0, parent=None, ss=None):
+        super(Effect, self).__init__(data=data, idx=idx, parent=parent, ss=ss)
+
+        # Integrity check
+        if TEST_INTEGRITY:
+            ops = set(self.operator) - self._HIDE_OP - set(('OnlyIfAtLeast',
+                                                            'OnlyIfNoMoreThan'))
+            if len(ops) > 1:
+                log.error("Mutually exclusive operators in %r.%r: %s",
+                          self.parent, self, ops)
+
+
+class Requirement(QualityOperator):
+    _OPS = (
+        'DifficultyLevel',
+        'DifficultyAdvanced',
+        'MinLevel',
+        'MinAdvanced',
+        'MaxLevel',
+        'MaxAdvanced',
+    )
+    _OPTIONAL_FIELDS = QualityOperator._OPTIONAL_FIELDS | set(_OPS)
+
+
 class BaseEvent(Entity):
     '''Base class for Event, Action and Effect, as they have a very similar format'''
 
@@ -953,262 +1209,6 @@ class Events(Entities):
                                     ((lid  and _.location.id == lid) or
                                      (name and re.search(name, _.location.name,
                                                          re.IGNORECASE))))))
-
-
-class QualityOperator(Entity):
-    '''Base Class for Effects and Requirements
-        Subclasses MUST override _OPS and _OPTIONAL_FIELDS
-    '''
-
-    # Order IS relevant, hence a tuple
-    _OPS = ()
-
-    _NOT_OP  = set(('AssociatedQuality', 'Id'))
-    _HIDE_OP = set(('VisibleWhenRequirementFailed',
-                    'BranchVisibleWhenRequirementFailed',
-                    'Priority',
-                    'ForceEquip'))
-
-    # To satisfy Entity base class
-    _REQUIRED_FIELDS = {"AssociatedQuality"}
-    _OPTIONAL_FIELDS = set()
-    _IGNORED_FIELDS  = _HIDE_OP
-
-    _reverse = ('Terror', 'Hunger', 'Menaces: Wounds')
-
-    def __init__(self, data, idx=0, parent=None, ss=None):
-        super(QualityOperator, self).__init__(data=data, idx=idx, ss=ss)
-
-        self.parent   = parent
-        self.quality  = None
-        self.operator = {_:data[_] for _ in data
-                         if _ not in self._NOT_OP}
-
-        qid = data['AssociatedQuality']['Id']
-        if self.ss and self.ss.qualities:
-            self.quality = self.ss.qualities.get(qid)
-
-        if not self.quality:
-            # Create a dummy one
-            self.quality = Quality(data={'Id': qid, 'Name':''},
-                                   ss=self.ss)
-            log.warning("Could not find Quality for %r: %d",
-                        parent, qid)
-
-        # Integrity check
-        if TEST_INTEGRITY:
-            ops = set(self.operator) - self._HIDE_OP
-            if not ops:
-                log.error("No relevant operators in %r.%r",
-                         self.parent, self)
-
-    def pretty(self):
-        return self._format("{id} - {name}{sep}{ops}{ifsep}{ifs}",
-                            "{id} - {name} += {qtyops}{ifsep}{ifs}",
-                            "{id} - {name} += ({qtyops}){ifsep}{ifs}")
-
-    def wiki(self):
-        return self._format(
-            "{{{{link icon|{name}}}}}{sep}{ops}{ifsep}{ifs}",
-            "{{{{link qty|{qtyops}|{name}}}}}{ifsep}{ifs}",
-            "{{{{link qty|{qtyops}|{name}||*}}}}{ifsep}{ifs}",
-            lvlfmt="{:+d}",
-            lvladvfmt="+{}",
-            advfmt='([[{name}]])',
-            chafmt="challenge ({{{{action|{}}}}} for 100%)",
-            chaadvfmt=('challenge:<br>\n:<span style="color: teal;">'
-                       '[{diff}]*100/{scaler}</span> for 100%'))
-
-    def _format(self,
-            # Defaults are suitable for __str__()
-            qfmt="{name}{sep}{ops}{ifsep}{ifs}",
-            qfmtqty="{name} += {qtyops}{ifsep}{ifs}",
-            qfmtrev="{name} += ({qtyops}){ifsep}{ifs}",
-            dfmt="[1 to {}]",
-            advfmt="[{name}]",
-            lvlfmt="{:d}",
-            lvladvfmt="{}",
-            setfmt="= {}",  # ":= {}"
-            eqfmt ="= {}",  # "== {}"
-            adjfmt="= {v1} or {v2}",  # "== {v1} or {v2}"
-            minfmt="≥ {}",
-            maxfmt="≤ {}",
-            ifminfmt="≥ {}",  # "if ≥ {}"
-            ifmaxfmt="≤ {}",  # "if ≤ {}"
-            ifeqfmt="= {}",  # "if == {}"
-            ifadjfmt="= {v1} or {v2}",  # "if == {v1} or {v2}"
-            elsefmt="{op}: {}",
-            chafmt="challenge ({} for 100%)",
-            chaadvfmt="challenge: ({diff})*100/{scaler}",
-            opsep=" and ",
-            qtyopsep=" + ",
-            ifsep=", only if ",
-            sep=" "):
-
-        def add(fmt, value, adv=False, *args, **kwargs):
-            posopstrs.append(fmt.format((self._parse_adv(str(value),
-                                                         advfmt,
-                                                         dfmt)
-                                         if adv else value),
-                                        *args, **kwargs))
-
-        def perc(val):
-            return (int(math.ceil(100.0 * val / self.quality.difficultyscaler))
-                    if val and self.quality.difficultyscaler
-                    else 'X')
-
-        ops = {_:self.operator[_]
-               for _ in self.operator
-               if _ not in self._HIDE_OP}
-        posopstrs = []
-        qtyopstrs = []
-        ifopstrs  = []
-        useqty = False  # ('Level' in ops or 'ChangeByAdvanced' in ops)
-
-        # Loop in _OPS to preserve order
-        for op in self._OPS:
-            if op not in ops:
-                continue
-
-            value = ops[op]
-
-            if op == 'MinLevel':
-                # Look-ahead for MaxLevel, to combine '> x and < x' into '== x'
-                val = ops.get('MaxLevel', None)
-                if val == value:
-                    add(eqfmt, value)
-                    ops.pop('MaxLevel')
-
-                # Look-ahead for adjacent values, combine into '== x or y'
-                elif val == value + 1:
-                    add(adjfmt, None, v1=value, v2=val)
-                    ops.pop('MaxLevel')
-
-                else:
-                    # Add the string snippet
-                    add(minfmt, value)
-
-            elif op == 'MinAdvanced':
-                # Look-ahead for equal values
-                val = ops.get('MaxAdvanced', None)
-                if val == value:
-                    add(eqfmt, value, True)
-                    ops.pop('MaxAdvanced')
-                else:
-                    add(minfmt, value, True)
-
-            elif op == 'OnlyIfAtLeast':
-                # Look-ahead, equal values
-                val = ops.get('OnlyIfNoMoreThan', None)
-                if val == value:
-                    ifopstrs.append(ifeqfmt.format(value))
-                    ops.pop('OnlyIfNoMoreThan')
-
-                # Look-ahead for adjacent values
-                elif val == value + 1:
-                    ifopstrs.append(ifadjfmt.format(v1=value, v2=val))
-                    ops.pop('OnlyIfNoMoreThan')
-
-                else:
-                    # Add the string snippet
-                    ifopstrs.append(ifminfmt.format(value))
-
-            elif op == 'OnlyIfNoMoreThan':
-                ifopstrs.append(ifmaxfmt.format(value))
-
-            elif op == 'Level':
-                useqty = True
-                qtyopstrs.append(lvlfmt.format(value))
-
-            elif op == 'ChangeByAdvanced':
-                useqty = True
-                val = re.sub(r"^[+-]?0+([+-])", "\g<1>", value)
-                if val[:1] not in "+-":
-                    val = lvladvfmt.format(val)
-
-                qtyopstrs.append(self._parse_adv(val, advfmt, dfmt))
-
-            elif op == 'DifficultyAdvanced':
-                posopstrs.append(chaadvfmt.format(
-                    diff=self._parse_adv(value, advfmt, dfmt),
-                    scaler=self.quality.difficultyscaler))
-
-            elif op == 'MaxLevel':             add(maxfmt,    value)
-            elif op == 'MaxLevelAdvanced':     add(maxfmt,    value, True)
-            elif op == 'MaxAdvanced':          add(maxfmt,    value, True)
-            elif op == 'DifficultyLevel':      add(chafmt,    perc(value))
-            elif op == 'SetToExactly':         add(setfmt,    value)
-            elif op == 'SetToExactlyAdvanced': add(setfmt,    value, True)
-
-            else:
-                add(elsefmt, value, adv='Advanced' in op, op=op)
-
-        if useqty:
-            if self.quality.name in self._reverse:
-                qfmt = qfmtrev
-            else:
-                qfmt = qfmtqty
-
-        return format_obj(qfmt,
-                          self.quality,
-                          sep=iif(posopstrs, sep),
-                          ifsep=iif(ifopstrs, ifsep),
-                          ifs=opsep.join(ifopstrs),
-                          ops=opsep.join(posopstrs),
-                          qtyops=qtyopsep.join(qtyopstrs),
-        )
-
-    def __unicode__(self):
-        return self._format()
-
-    def __repr__(self):
-        try:
-            return b"<{cls} {id}: {qid} - {qname} {ops}>".format(
-                cls   = self.__class__.__name__,
-                id    = self.id,
-                qid   = self.quality.id,
-                qname = repr(self.quality.name),
-                ops   = repr(self.operator))
-        except AttributeError:
-            # repr() requested by base class before __init__() finishes
-            return b"<{cls} {id}>".format(
-                cls   = self.__class__.__name__,
-                id    = self.id)
-
-
-class Effect(QualityOperator):
-    _OPS = (
-        'Level',
-        'ChangeByAdvanced',
-        'SetToExactly',
-        'SetToExactlyAdvanced',
-        'OnlyIfAtLeast',
-        'OnlyIfNoMoreThan',
-    )
-    _OPTIONAL_FIELDS = QualityOperator._OPTIONAL_FIELDS | set(_OPS)
-
-    def __init__(self, data, idx=0, parent=None, ss=None):
-        super(Effect, self).__init__(data=data, idx=idx, parent=parent, ss=ss)
-
-        # Integrity check
-        if TEST_INTEGRITY:
-            ops = set(self.operator) - self._HIDE_OP - set(('OnlyIfAtLeast',
-                                                            'OnlyIfNoMoreThan'))
-            if len(ops) > 1:
-                log.error("Mutually exclusive operators in %r.%r: %s",
-                          self.parent, self, ops)
-
-
-class Requirement(QualityOperator):
-    _OPS = (
-        'DifficultyLevel',
-        'DifficultyAdvanced',
-        'MinLevel',
-        'MinAdvanced',
-        'MaxLevel',
-        'MaxAdvanced',
-    )
-    _OPTIONAL_FIELDS = QualityOperator._OPTIONAL_FIELDS | set(_OPS)
 
 
 class SunlessSea(object):
