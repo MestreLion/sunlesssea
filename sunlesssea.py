@@ -51,6 +51,8 @@ log = logging.getLogger(os.path.basename(os.path.splitext(__file__)[0]))
 TEST_INTEGRITY = False
 
 
+
+
 ####################################################################################
 # General helper functions
 
@@ -64,11 +66,13 @@ def safeprint(text=""):
     print(unicode(text).encode(sys.stdout.encoding or 'UTF-8'))
 
 
+
 def format_obj(fmt, obj, *args, **kwargs):
     objdict = {_:getattr(obj, _) for _ in vars(obj) if not _.startswith('_')}
     objdict.update(dict(str=str(obj), repr=repr(obj)))
     objdict.update(kwargs)
     return unicode(fmt).format(*args, **objdict)
+
 
 
 def indent(text, level=1, pad='\t'):
@@ -79,11 +83,14 @@ def indent(text, level=1, pad='\t'):
     return "{}{}".format(indent, ('\n'+indent).join(text.rstrip().split('\n')))
 
 
+
 def iif(cond, trueval, falseval=""):
     if cond:
         return trueval
     else:
         return falseval
+
+
 
 
 ####################################################################################
@@ -167,6 +174,7 @@ def parse_args(argv=None):
     return args
 
 
+
 def main(argv=None):
     global TEST_INTEGRITY
     args = parse_args(argv or [])
@@ -222,9 +230,9 @@ def main(argv=None):
 
 
 
+
 ####################################################################################
 # Classes
-
 
 class Entity(object):
     '''Base class for an Entity
@@ -242,6 +250,7 @@ class Entity(object):
     _re_gamenote = re.compile('\[([^\]]+)]"?$')
     _re_adv = re.compile('\[(?P<key>[a-z]):(?P<value>(?:[^][]+|\[[^][]+])+)]')
 
+
     def __init__(self, data, idx=0, ss=None):
         self._data = data
         self.idx   = idx
@@ -255,6 +264,7 @@ class Entity(object):
 
         if TEST_INTEGRITY:
             self._test_integrity()
+
 
     def _test_integrity(self):
         fields = set(self._data)
@@ -277,14 +287,17 @@ class Entity(object):
         if not self.ss:
             log.error("%r has no reference to a SunlessSea instance", self)
 
+
     def dump(self):
         return self._data
+
 
     def bare(self):
         if self.name:
             return "{}\t{}".format(self.id, self.name)
         else:
             return str(self.id)
+
 
     def pretty(self):
         pretty = "{:d}".format(self.id)
@@ -296,8 +309,10 @@ class Entity(object):
         #pretty += "\n"
         return pretty
 
+
     def wiki(self):
         return self.name or str(self.id)
+
 
     def wikirow(self):
         return format_obj(
@@ -312,6 +327,7 @@ class Entity(object):
                           self.description.replace("\r","").split('\n')),
                 qnamefmt="[q:[[{}]]]"))
 
+
     def wikipage(self):
         return format_obj(
             "=={name}==\n"
@@ -319,12 +335,14 @@ class Entity(object):
             "* {wiki}\n",
             self, entity=self, wiki=self.wiki(), repr=repr(self))
 
+
     def _desc(self, text, cut=120, elipsis="(...)"):
         '''Quotes and limits a description, and replace control characters'''
         if len(text) > cut:
             text = text[:cut-len(elipsis)] + "(...)"
         # repr() quotes and fixes \n, \r, but must get rid of 'u' prefix
         return repr(text)[1:]
+
 
     def _parse_adv(self, text, qfmt="[{name}]", dfmt="[1 to {}]",
                    noqfmt="[Quality({})]", qnamefmt="{{{}}}"):
@@ -393,6 +411,7 @@ class Entity(object):
 
         return result
 
+
     def __repr__(self):
         if self.name:
             return b"<{} {:d}: {}>".format(self.__class__.__name__,
@@ -402,11 +421,14 @@ class Entity(object):
             return b"<{} {:d}>".format(self.__class__.__name__,
                                        self.id)
 
+
     def __unicode__(self):
         return self.name if self.name else unicode(repr(self))
 
+
     def __str__(self):
         return self.__unicode__().encode('utf-8')
+
 
 
 class Quality(Entity):
@@ -451,6 +473,7 @@ class Quality(Entity):
         ('image_status',  'LevelImageText', 'Images'),
     )
 
+
     def __init__(self, data, idx=0, ss=None):
         super(Quality, self).__init__(data=data, idx=idx, ss=ss)
         for attr, atype, default in (
@@ -470,10 +493,12 @@ class Quality(Entity):
         for attr, key, _ in self._status_fields:
             setattr(self, attr, self._parse_status(self._data.get(key, "")))
 
+
     def _parse_status(self, value):
         if not value:
             return {}
         return {int(k):v for k,v in (row.split("|") for row in value.split("~"))}
+
 
     def pretty(self):
         pretty = super(Quality, self).pretty()
@@ -488,14 +513,17 @@ class Quality(Entity):
         return pretty
 
 
+
 class Location(Entity):
     _REQUIRED_FIELDS = set(('Name',))
     _OPTIONAL_FIELDS = set(('Description', 'ImageName', 'MoveMessage'))
+
 
     def __init__(self, data, idx=0, ss=None):
         super(Location, self).__init__(data=data, idx=idx, ss=ss)
         self.message = self._data.get('MoveMessage', "")
         self.setting = 0
+
 
     def pretty(self):
         pretty = super(Location, self).pretty().strip()  # No '\n' after Description
@@ -504,10 +532,12 @@ class Location(Entity):
         return pretty
 
 
+
 class ShopItem(Entity):
     _REQUIRED_FIELDS = set(("Quality", "PurchaseQuality"))
     _OPTIONAL_FIELDS = set(("Cost", "SellPrice"))
     _IGNORED_FIELDS  = set(("BuyMessage", "SellMessage"))  # only dummies
+
 
     def __init__(self, data, idx=0, ss=None, shop=None):
         super(ShopItem, self).__init__(data=data, idx=idx, ss=ss)
@@ -517,9 +547,11 @@ class ShopItem(Entity):
         self.buy      = self._data.get('Cost', 0)
         self.sell     = self._data.get('SellPrice', 0)
 
+
     def pretty(self):
         sell = ", sell for {}".format(self.sell) if self.sell else ""
         return "{0.item}: {0.buy} x {0.currency}{sell}".format(self, sell=sell)
+
 
     def __repr__(self):
         try:
@@ -530,13 +562,16 @@ class ShopItem(Entity):
             # repr() requested by base class before __init__() finishes
             return b"<{0.__class__.__name__} {0.id}>".format(self)
 
+
     def __unicode__(self):
         return self.pretty()
+
 
 
 class Shop(Entity):
     _REQUIRED_FIELDS = Entity._REQUIRED_FIELDS | set(('Availabilities',))
     _IGNORED_FIELDS  = {'Ordering'}  # a single occurrence
+
 
     def __init__(self, data, idx=0, ss=None, locations=None):
         super(Shop, self).__init__(data=data, idx=idx, ss=ss)
@@ -544,6 +579,7 @@ class Shop(Entity):
         self.items = [ShopItem(data=_d, idx=_i, ss=self.ss, shop=self)
                       for _i, _d in
                       enumerate(self._data['Availabilities'], 1)]
+
 
     def pretty(self):
         pretty = super(Shop, self).pretty()
@@ -553,6 +589,7 @@ class Shop(Entity):
         ) if self.locations else ""
         items = "\n\t\t".join(_.pretty() for _ in self.items)
         return "{}{}\n\tItems: {}\n\t\t{}".format(pretty, locations, len(self.items), items)
+
 
 
 class QualityOperator(Entity):
@@ -575,6 +612,7 @@ class QualityOperator(Entity):
     _IGNORED_FIELDS  = _HIDE_OP
 
     _reverse = ('Terror', 'Hunger', 'Menaces: Wounds')
+
 
     def __init__(self, data, idx=0, parent=None, ss=None):
         super(QualityOperator, self).__init__(data=data, idx=idx, ss=ss)
@@ -602,10 +640,12 @@ class QualityOperator(Entity):
                 log.error("No relevant operators in %r.%r",
                          self.parent, self)
 
+
     def pretty(self):
         return self._format("{id} - {name}{sep}{ops}{ifsep}{ifs}",
                             "{id} - {name} += {qtyops}{ifsep}{ifs}",
                             "{id} - {name} += ({qtyops}){ifsep}{ifs}")
+
 
     def wiki(self):
         return self._format(
@@ -618,6 +658,7 @@ class QualityOperator(Entity):
             chafmt="challenge ({{{{action|{}}}}} for 100%)",
             chaadvfmt=('challenge:<br>\n:<span style="color: teal;">'
                        '[{diff}]*100/{scaler}</span> for 100%'))
+
 
     def _format(self,
             # Defaults are suitable for __str__()
@@ -758,8 +799,10 @@ class QualityOperator(Entity):
                           qtyops=qtyopsep.join(qtyopstrs),
         )
 
+
     def __unicode__(self):
         return self._format()
+
 
     def __repr__(self):
         try:
@@ -776,6 +819,7 @@ class QualityOperator(Entity):
                 id    = self.id)
 
 
+
 class Effect(QualityOperator):
     _OPS = (
         'Level',
@@ -786,6 +830,7 @@ class Effect(QualityOperator):
         'OnlyIfNoMoreThan',
     )
     _OPTIONAL_FIELDS = QualityOperator._OPTIONAL_FIELDS | set(_OPS)
+
 
     def __init__(self, data, idx=0, parent=None, ss=None):
         super(Effect, self).__init__(data=data, idx=idx, parent=parent, ss=ss)
@@ -799,6 +844,7 @@ class Effect(QualityOperator):
                           self.parent, self, ops)
 
 
+
 class Requirement(QualityOperator):
     _OPS = (
         'DifficultyLevel',
@@ -809,6 +855,7 @@ class Requirement(QualityOperator):
         'MaxAdvanced',
     )
     _OPTIONAL_FIELDS = QualityOperator._OPTIONAL_FIELDS | set(_OPS)
+
 
 
 class BaseEvent(Entity):
@@ -828,6 +875,7 @@ class BaseEvent(Entity):
         effects=     ('QualitiesAffected', Effect),       # Events and Outcomes
     )
 
+
     def __init__(self, data, idx=0, parent=None, ss=None):
         super(BaseEvent, self).__init__(data=data, idx=idx, ss=ss)
 
@@ -845,6 +893,7 @@ class BaseEvent(Entity):
             elif parent.id != iid:
                 log.warn("Parent ID in object and data don't match for %r: %d vs %d",
                          parent.id, iid)
+
 
     def pretty(self, location=None):
         pretty = super(BaseEvent, self).pretty()
@@ -864,6 +913,7 @@ class BaseEvent(Entity):
 
         return pretty
 
+
     def _create_qualops(self, attr):
         key, cls = self._qualop_types[attr]
         iids = []  # needed just for the integrity check
@@ -876,6 +926,7 @@ class BaseEvent(Entity):
                 else:
                     iids.append(iid)
             yield cls(data=item, idx=i, parent=self, ss=self.ss)
+
 
 
 class Event(BaseEvent):
@@ -904,6 +955,7 @@ class Event(BaseEvent):
         "Urgency",
     ))
 
+
     def __init__(self, data, idx=0, ss=None):
         super(Event, self).__init__(data=data, idx=idx, ss=ss)
 
@@ -927,6 +979,7 @@ class Event(BaseEvent):
         for i, item in enumerate(self._data.get('ChildBranches', []), 1):
             self.actions.append(Action(data=item, idx=i, parent=self, ss=self.ss))
 
+
     def pretty(self):
         pretty = super(Event, self).pretty(location=self.location)
 
@@ -936,6 +989,7 @@ class Event(BaseEvent):
                 pretty += "\n{}\n".format(indent(item.pretty(), 2))
 
         return pretty
+
 
     def wikipage(self):
         linked, inloc = (
@@ -1000,6 +1054,7 @@ class Event(BaseEvent):
         )))
 
 
+
 class Action(BaseEvent):
     # Order is VERY important, hence tuple
     _OUTCOME_TYPES = ('DefaultEvent',
@@ -1028,6 +1083,7 @@ class Action(BaseEvent):
                                ("Success", "Successful"))
     _outcome_label_failed   = (("Default", "Failed"),)
 
+
     def __init__(self, data, idx=0, parent=None, ss=None):
         super(Action, self).__init__(data=data, idx=idx, parent=parent, ss=ss)
 
@@ -1046,12 +1102,14 @@ class Action(BaseEvent):
                  chance    = self._data.get(item + 'Chance', None),
                  label     = self._outcome_label(item)))
 
+
     @property
     def gamenote(self):
         match = re.search(self._re_gamenote, self.description)
         if match:
             return match.group(1)
         return ""
+
 
     def pretty(self):
         pretty = super(Action, self).pretty().strip()
@@ -1060,6 +1118,7 @@ class Action(BaseEvent):
             pretty += "\n\n{}".format(indent(item.pretty(), 1))
 
         return pretty
+
 
     def wikirow(self):
         outcomes = len(self.outcomes)
@@ -1116,6 +1175,7 @@ class Action(BaseEvent):
 
         return page
 
+
     def _outcome_label(self, otype):
         label = otype
         for sfrom, sto in (self._outcome_label_replaces +
@@ -1124,6 +1184,7 @@ class Action(BaseEvent):
                             else ())):
             label = label.replace(sfrom, sto)
         return label.capitalize()
+
 
 
 class Outcome(BaseEvent):
@@ -1141,6 +1202,7 @@ class Outcome(BaseEvent):
         "SwitchToSettingId",
     ))
 
+
     def __init__(self, data, idx=0, parent=None, ss=None,
                  otype=None, chance=None, label=None):
         super(Outcome, self).__init__(data=data, idx=idx, parent=parent, ss=ss)
@@ -1150,6 +1212,7 @@ class Outcome(BaseEvent):
         self.label   = label
         self.trigger = self._data.get('LinkToEvent', {}).get('Id', None)
         self.effects = list(self._create_qualops('effects'))
+
 
     def pretty(self):
         pretty = "{} Outcome{}:\n{}\n".format(
@@ -1162,6 +1225,7 @@ class Outcome(BaseEvent):
                                                             self.trigger.name)
 
         return pretty
+
 
     def wiki(self):
         page = iif(self.name, "{{{{effect title|{}}}}}\n".format(self.name), "")
@@ -1181,9 +1245,11 @@ class Outcome(BaseEvent):
         return page
 
 
+
 class Entities(object):
     '''Base class for entity containers. Subclasses SHOULD override EntityCls!'''
     EntityCls=Entity
+
 
     def __init__(self, data=None, entities=None, ss=None, *eargs, **ekwargs):
         self._entities = {}
@@ -1201,6 +1267,7 @@ class Entities(object):
                 self._entities[entity.id] = entity
                 self._order.append(entity)
 
+
     def find(self, name):
         '''Return Entities filtered by name, case-insensitive.
             If falsy, return all entities
@@ -1210,6 +1277,7 @@ class Entities(object):
         return self.__class__(entities=(_ for _ in self
                                         if re.search(name, _.name,
                                                      re.IGNORECASE)))
+
 
     def wikitable(self):
         table = ('{| class="ss-table sortable" style="width: 100%;"\n'
@@ -1223,21 +1291,27 @@ class Entities(object):
         table += '|-\n|}'
         return table
 
+
     def wikipage(self):
         return "\n\n\n".join(_.wikipage().strip() for _ in self)
+
 
     def dump(self):
         return "\n".join((_.dump() for _ in self))
 
+
     def pretty(self):
         return "\n\n".join((_.pretty().strip() for _ in self))
+
 
     def bare(self):
         return "\n".join(_.bare() for _ in self)
 
+
     def get(self, eid, default=None):
         '''Get entity by ID'''
         return self._entities.get(eid, default)
+
 
     def __getitem__(self, val):
         if isinstance(val, int):
@@ -1246,35 +1320,44 @@ class Entities(object):
             return self.__class__(entities=self._order[val],
                                   ss=self.ss)
 
+
     def __iter__(self):
         for entity in self._order:
             yield entity
 
+
     def __len__(self):
         return len(self._entities)
+
 
     def __unicode__(self):
         return "<{}: {:d}>".format(self.__class__.__name__,
                                    len(self._entities))
 
+
     def __str__(self):
         return self.__unicode__().encode('utf-8')
+
 
 
 class Qualities(Entities):
     EntityCls=Quality
 
 
+
 class Locations(Entities):
     EntityCls=Location
+
 
 
 class Shops(Entities):
     EntityCls=Shop
 
 
+
 class Events(Entities):
     EntityCls=Event
+
 
     def at(self, lid=0, name=""):
         '''Return Events by location ID or name'''
@@ -1287,11 +1370,14 @@ class Events(Entities):
                                                          re.IGNORECASE))))))
 
 
+
 class SunlessSea(object):
     '''
         Manager class, the one that loads the JSON files
         and call each entity container's constructor
     '''
+
+
     def __init__(self, datadir=None):
         self.qualities = Qualities(data=self._load('qualities', datadir), ss=self)
         self.locations = Locations(data=self._load('areas',     datadir), ss=self)
@@ -1324,6 +1410,7 @@ class SunlessSea(object):
                     log.error("%r.%r.%r links to a non-existant event: %d",
                               event, action, outcome, trigger)
 
+
     def _create_shop(self, datadir):
         i = 0  # lame
         exchanges = self._load('exchanges', datadir)
@@ -1335,6 +1422,7 @@ class SunlessSea(object):
             for shop in exchange['Shops']:
                 i+=1
                 yield Shop(data=shop, idx=i, ss=self, locations=locations)
+
 
     def _create_settings(self, datadir):
         # Deal with the tiles, settings, areas, locations and ports mess
@@ -1373,6 +1461,7 @@ class SunlessSea(object):
                                     for _ in setting['locations']))
 
         return settings
+
 
     def _load(self, entity, datadir=None, subdir='entities'):
         path = os.path.join(datadir or get_datadir(),
