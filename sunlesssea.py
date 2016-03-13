@@ -24,14 +24,14 @@
 # Ideas
 # - pretty(short=True), so they can use each other
 #    Ex: Location.pretty(short=True) does not print description
-# - make pretty uniform across indent, \n, etc
-# - improve advanced parser to handle "[d:[q:1234]]"
+# - make pretty uniform across indent, \n, etc. Almost there already
 # - format +[1 to x] so it can use {{qty}} to get non-text color
 # - read text statuses on numeric quality assignments/tests
 #    so "QualityX := 3" => "QualityX := 3, [3's Status Description]"
 #    or even "Description" (think about SAY)
 # - Improve (or even completely deprecate) format_obj using better .format()
 #    specs and ideas from http://code.activestate.com/recipes/577227/
+# - Quality need a custom wikipage() with {{quality status}} listings
 
 from __future__ import unicode_literals, print_function
 
@@ -223,7 +223,8 @@ def main(argv=None):
 
 class Entity(object):
     '''Base class for an Entity
-        Subclasses SHOULD override _REQUIRED_FIELDS, _OPTIONAL_FIELDS, _IGNORED_FIELDS
+        Subclasses MAY override or extend _REQUIRED_FIELDS, and MAY override
+        _OPTIONAL_FIELDS _and IGNORED_FIELDS
     '''
 
     _ENTITY_FIELDS    = set(("Id", "Name", "Description", "Image"))
@@ -276,9 +277,12 @@ class Entity(object):
 
     def pretty(self):
         pretty = "{:d}".format(self.id)
-        if self.name:  pretty += " - {}".format(self.name)
-        if self.image: pretty += " ({})".format(self.image)
-        pretty += "\n"
+        if self.name:        pretty += " - {}".format(self.name)
+        if self.image:       pretty += " ({})".format(self.image)
+        if self.description:
+            # Trailing '\n' is intentional, blank line after Description
+            pretty += "\n\t{}\n".format(self._desc(self.description))
+        #pretty += "\n"
         return pretty
 
     def wiki(self):
@@ -304,7 +308,7 @@ class Entity(object):
             "* {wiki}\n",
             self, entity=self, wiki=self.wiki(), repr=repr(self))
 
-    def _desc(self, text, cut=80, elipsis="(...)"):
+    def _desc(self, text, cut=120, elipsis="(...)"):
         '''Quotes and limits a description, and replace control characters'''
         if len(text) > cut:
             text = text[:cut-len(elipsis)] + "(...)"
@@ -463,9 +467,6 @@ class Quality(Entity):
     def pretty(self):
         pretty = super(Quality, self).pretty()
 
-        if self.description:
-            pretty += "\t{}\n".format(self._desc(self.description))
-
         for attr, _, caption in self._status_fields:
             statuses = getattr(self, attr)
             if statuses:
@@ -482,12 +483,13 @@ class Location(Entity):
 
     def __init__(self, data, idx=0, ss=None):
         super(Location, self).__init__(data=data, idx=idx, ss=ss)
-        self.message     = self._data.get('MoveMessage', "")
+        self.message = self._data.get('MoveMessage', "")
+        self.setting = 0
 
     def pretty(self):
-        pretty = super(Location, self).pretty()
-        for attr in ('message', 'description'):
-            pretty += "\t{}\n".format(self._desc(getattr(self, attr)))
+        pretty = super(Location, self).pretty().strip()  # No '\n' after Description
+        if self.message:
+            pretty += "\n\tMessage: {}".format(self._desc(self.message))
         return pretty
 
 
@@ -782,19 +784,19 @@ class BaseEvent(Entity):
                 log.warn("Parent ID in object and data don't match for %r: %d vs %d",
                          parent.id, iid)
 
-    def pretty(self):
-        pretty = "{}\n".format(super(BaseEvent, self).pretty().strip())
+    def pretty(self, location=None):
+        pretty = super(BaseEvent, self).pretty()
 
-        if self.description:
-            pretty += "\t{}\n".format(self._desc(self.description))
+        if location:
+            pretty += "\n\tLocation: {}".format(self.location)
 
         if getattr(self, 'requirements', None):
-            pretty += "\tRequirements: {:d}\n".format(len(self.requirements))
+            pretty += "\n\tRequirements: {:d}\n".format(len(self.requirements))
             for item in self.requirements:
                 pretty += "{}\n".format(indent(item.pretty(), 2))
 
         if getattr(self, 'effects', None):
-            pretty += "\tEffects: {:d}\n".format(len(self.effects))
+            pretty += "\n\tEffects: {:d}\n".format(len(self.effects))
             for item in self.effects:
                 pretty += "{}\n".format(indent(item.pretty(), 2))
 
@@ -864,10 +866,7 @@ class Event(BaseEvent):
             self.actions.append(Action(data=item, idx=i, parent=self, ss=self.ss))
 
     def pretty(self):
-        pretty = super(Event, self).pretty()
-
-        if self.location:
-            pretty += "\tLocation: {}\n".format(self.location)
+        pretty = super(Event, self).pretty(location=self.location)
 
         if self.actions:
             pretty += "\n\tActions: {:d}".format(len(self.actions))
@@ -1169,7 +1168,7 @@ class Entities(object):
         return "\n".join((_.dump() for _ in self))
 
     def pretty(self):
-        return "\n".join((_.pretty() for _ in self))
+        return "\n\n".join((_.pretty().strip() for _ in self))
 
     def show(self):
         return "\n".join((unicode(_) for _ in self))
@@ -1195,6 +1194,9 @@ class Entities(object):
     def __unicode__(self):
         return "<{}: {:d}>".format(self.__class__.__name__,
                                    len(self._entities))
+
+    def __str__(self):
+        return self.__unicode__().encode('utf-8')
 
 
 class Qualities(Entities):
@@ -1249,9 +1251,9 @@ class SunlessSea(object):
                     log.error("%r.%r.%r links to a non-existant event: %d",
                               event, action, outcome, trigger)
 
-    def _load(self, entity, datadir=None):
+    def _load(self, entity, datadir=None, subdir='entities'):
         path = os.path.join(datadir or DATADIR,
-                            'entities',
+                            subdir,
                             "{}_import.json".format(entity))
         log.debug("Opening data file for '%s': %s", entity, path)
         try:
@@ -1260,7 +1262,7 @@ class SunlessSea(object):
                 return json.load(fd, strict=False)
         except IOError as e:
             log.error("Could not load data file for '%s': %s", entity, e)
-            return []
+            return {}
 
 
 
