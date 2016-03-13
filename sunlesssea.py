@@ -47,22 +47,6 @@ import math
 
 log = logging.getLogger(os.path.basename(os.path.splitext(__file__)[0]))
 
-# Linux and FreeBSD
-if sys.platform.startswith("linux") or sys.platform.startswith("freebsd"):
-    import xdg.BaseDirectory as xdg
-    DATADIR=os.path.join(xdg.xdg_config_home, "unity3d/Failbetter Games/Sunless Sea")
-
-# Mac OSX
-elif sys.platform == "darwin":
-    DATADIR=os.path.expanduser("~/Library/Application Support/Unity.Failbetter Games.Sunless Sea")
-
-# Windows
-elif sys.platform == "win32":
-    DATADIR=os.path.expanduser("~\AppData\LocalLow\Failbetter Games\Sunless Sea")
-
-else:
-    DATADIR="."  # and pray for the best...
-
 # Changed by main() on command-line args
 TEST_INTEGRITY = False
 
@@ -105,6 +89,26 @@ def iif(cond, trueval, falseval=""):
 ####################################################################################
 # Main() and helpers
 
+def get_datadir():
+    # Linux and FreeBSD
+    if sys.platform.startswith("linux") or sys.platform.startswith("freebsd"):
+        import xdg.BaseDirectory as xdg
+        return os.path.join(xdg.xdg_config_home,
+                            "unity3d/Failbetter Games/Sunless Sea")
+
+    # Mac OSX
+    elif sys.platform == "darwin":
+        return os.path.expanduser("~/Library/Application Support/"
+                                  "Unity.Failbetter Games.Sunless Sea")
+
+    # Windows
+    elif sys.platform == "win32":
+        return os.path.expanduser("~\\AppData\\LocalLow\\"
+                                  "Failbetter Games\\Sunless Sea")
+
+    return "."  # and pray for the best...
+
+
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
@@ -132,7 +136,7 @@ def parse_args(argv=None):
 
     parser.add_argument('-d', '--datadir',
                         dest='datadir',
-                        default=DATADIR,
+                        default=get_datadir(),
                         help="Game data directory. [Default: %(default)s]")
 
     parser.add_argument('-f', '--format',
@@ -1371,7 +1375,7 @@ class SunlessSea(object):
         return settings
 
     def _load(self, entity, datadir=None, subdir='entities'):
-        path = os.path.join(datadir or DATADIR,
+        path = os.path.join(datadir or get_datadir(),
                             subdir,
                             "{}_import.json".format(entity))
         log.debug("Opening data file for '%-9s': %s", entity, path)
