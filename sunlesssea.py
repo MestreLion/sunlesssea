@@ -493,6 +493,50 @@ class Location(Entity):
         return pretty
 
 
+class ShopItem(Entity):
+    _REQUIRED_FIELDS = set(("Quality", "PurchaseQuality"))
+    _OPTIONAL_FIELDS = set(("Cost", "SellPrice"))
+
+    def __init__(self, data, idx=0, ss=None, shop=None):
+        super(ShopItem, self).__init__(data=data, idx=idx, ss=ss)
+        self.shop     = shop
+        self.item     = ss.qualities.get(self._data['Quality']['Id'])
+        self.currency = ss.qualities.get(self._data['PurchaseQuality']['Id'])
+        self.buy      = self._data.get('Cost', 0)
+        self.sell     = self._data.get('SellPrice', 0)
+
+    def pretty(self):
+        sell = ", sell for {}".format(self.sell) if self.sell else ""
+        return "{0.item}: {0.buy} x {0.currency}{sell}".format(self, sell=sell)
+
+    def __repr__(self):
+        return (b"<{0.__class__.__name__} {0.id}:"
+                 " {0.item!r} ({0.buy}, {0.sell}) x {0.currency!r}>".format(self))
+
+    def __unicode__(self):
+        return self.pretty()
+
+
+class Shop(Entity):
+    _REQUIRED_FIELDS = Entity._REQUIRED_FIELDS | set(('Availabilities',))
+
+    def __init__(self, data, idx=0, ss=None, locations=None):
+        super(Shop, self).__init__(data=data, idx=idx, ss=ss)
+        self.locations = locations
+        self.items = [ShopItem(data=_d, idx=_i, ss=self.ss, shop=self)
+                      for _i, _d in
+                      enumerate(self._data['Availabilities'], 1)]
+
+    def pretty(self):
+        pretty = super(Shop, self).pretty()
+        locations = (
+            "\n\tLocation: {}".format(", ".join(str(_) for _ in
+                                                self.locations))
+        ) if self.locations else ""
+        items = "\n\t\t".join(_.pretty() for _ in self.items)
+        return "{}{}\n\tItems: {}\n\t\t{}".format(pretty, locations, len(self.items), items)
+
+
 class QualityOperator(Entity):
     '''Base Class for Effects and Requirements
         Subclasses MUST override _OPS and _OPTIONAL_FIELDS
@@ -1205,6 +1249,10 @@ class Qualities(Entities):
 
 class Locations(Entities):
     EntityCls=Location
+
+
+class Shops(Entities):
+    EntityCls=Shop
 
 
 class Events(Entities):
