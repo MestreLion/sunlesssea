@@ -145,7 +145,7 @@ def parse_args(argv=None):
 
     parser.add_argument(dest='entity',
                         nargs="?",
-                        choices=('locations', 'qualities', 'events', 'demo', 'test'),
+                        choices=('locations', 'qualities', 'events', 'shops', 'demo', 'test'),
                         default='test',
                         metavar="ENTITY",
                         help="Entity to work on."
@@ -176,8 +176,9 @@ def main(argv=None):
     log.debug(ss.locations)
     log.debug(ss.qualities)
     log.debug(ss.events)
+    log.debug(ss.shops)
 
-    if args.entity in ('locations', 'qualities', 'events'):
+    if args.entity in ('locations', 'qualities', 'events', 'shops'):
         entities = getattr(ss, args.entity).find(args.filter)
         if not entities:
             log.error("No %s found for %r", args.entity, args.filter)
@@ -502,6 +503,7 @@ class Location(Entity):
 class ShopItem(Entity):
     _REQUIRED_FIELDS = set(("Quality", "PurchaseQuality"))
     _OPTIONAL_FIELDS = set(("Cost", "SellPrice"))
+    _IGNORED_FIELDS  = set(("BuyMessage", "SellMessage"))  # only dummies
 
     def __init__(self, data, idx=0, ss=None, shop=None):
         super(ShopItem, self).__init__(data=data, idx=idx, ss=ss)
@@ -516,8 +518,13 @@ class ShopItem(Entity):
         return "{0.item}: {0.buy} x {0.currency}{sell}".format(self, sell=sell)
 
     def __repr__(self):
-        return (b"<{0.__class__.__name__} {0.id}:"
-                 " {0.item!r} ({0.buy}, {0.sell}) x {0.currency!r}>".format(self))
+        try:
+            return (b"<{0.__class__.__name__} {0.id}:"
+                     " {0.item!r} ({0.buy}, {0.sell})"
+                     " x {0.currency!r}>".format(self))
+        except AttributeError:
+            # repr() requested by base class before __init__() finishes
+            return b"<{0.__class__.__name__} {0.id}>".format(self)
 
     def __unicode__(self):
         return self.pretty()
@@ -525,6 +532,7 @@ class ShopItem(Entity):
 
 class Shop(Entity):
     _REQUIRED_FIELDS = Entity._REQUIRED_FIELDS | set(('Availabilities',))
+    _IGNORED_FIELDS  = {'Ordering'}  # a single occurrence
 
     def __init__(self, data, idx=0, ss=None, locations=None):
         super(Shop, self).__init__(data=data, idx=idx, ss=ss)
@@ -1285,6 +1293,13 @@ class SunlessSea(object):
         self.locations = Locations(data=self._load('areas',     datadir), ss=self)
         self.events    = Events(   data=self._load('events',    datadir), ss=self)
 
+        # Not yet a first-class citizen
+        self.settings  = self._create_settings(datadir)
+
+        # First class, requires self.settings, constructor still messy
+        self.shops     = Shops(entities=(_ for _ in self._create_shop(datadir)), ss=self)
+        self.ports     = None  # soon!
+
         # Add 'LinkToEvent' references
         for event in self.events:
             for action in event.actions:
@@ -1305,11 +1320,61 @@ class SunlessSea(object):
                     log.error("%r.%r.%r links to a non-existant event: %d",
                               event, action, outcome, trigger)
 
+    def _create_shop(self, datadir):
+        i = 0  # lame
+        exchanges = self._load('exchanges', datadir)
+        for exchange in exchanges:
+            locations = set(_l
+                            for _ in exchange['SettingIds'] if _ in self.settings
+                            for _l in self.settings[_]['locations'])
+
+            for shop in exchange['Shops']:
+                i+=1
+                yield Shop(data=shop, idx=i, ss=self, locations=locations)
+
+    def _create_settings(self, datadir):
+        # Deal with the tiles, settings, areas, locations and ports mess
+        settings = {}
+        areas={}  # Integrity check only
+        tiles = self._load('Tiles', datadir, subdir='geography')
+        for item, aid, sid in (((_['Name'], _t['Name'], _p['Name']),
+                                _p['Area']['Id'],
+                                _p['Setting']['Id'])
+                                for _ in tiles
+                                for _t in  _['Tiles']
+                                for _p in _t['PortData']):
+                if TEST_INTEGRITY:
+                    if not areas.get(aid, sid) == sid:
+                        log.error("Area %s is not 1:1 with Settings: %s, %s",
+                                  aid, areas[aid], sid)
+                    areas[aid] = sid
+
+                location = self.locations.get(aid, None)
+                if location:
+                    location.setting = sid
+                else:
+                    # Dummy
+                    location = Location(data={'Id': aid}, ss=self)
+                    log.error("Location not found for port (%s): %s",
+                              ", ".join(item), aid)
+
+                settings.setdefault(
+                    sid, {'locations': set()})['locations'].add(location)
+
+        # Requires check AND debug flags... can't possibly hide this better :)
+        if TEST_INTEGRITY:
+            for sid, setting in settings.iteritems():
+                log.debug("Locations in setting %s: %s", sid,
+                          ", ".join("{0.id} - {0!s}".format(_)
+                                    for _ in setting['locations']))
+
+        return settings
+
     def _load(self, entity, datadir=None, subdir='entities'):
         path = os.path.join(datadir or DATADIR,
                             subdir,
                             "{}_import.json".format(entity))
-        log.debug("Opening data file for '%s': %s", entity, path)
+        log.debug("Opening data file for '%-9s': %s", entity, path)
         try:
             with open(path) as fd:
                 # strict=False to allow tabs inside strings
