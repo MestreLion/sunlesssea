@@ -154,9 +154,18 @@ def parse_args(argv=None):
                             " Available formats: [%(choices)s]."
                             " [Default: %(default)s]")
 
-    parser.add_argument(dest='entity',
-                        nargs="?",
-                        choices=('locations', 'qualities', 'events', 'shops', 'demo', 'test'),
+    parser.add_argument('-m', '--method',
+                        dest='method',
+                        choices=('usage'),
+                        #default='test',
+                        metavar="METHOD",
+                        help="Method (operation) to execute. Not all entities have all methods"
+                            " Available methods: [%(choices)s]."
+                            " [Default: %(default)s]")
+
+    parser.add_argument('-e', '--entity',
+                        dest='entity',
+                        choices=('locations', 'qualities', 'events', 'shops'),
                         default='test',
                         metavar="ENTITY",
                         help="Entity to work on."
@@ -195,6 +204,13 @@ def main(argv=None):
         if not entities:
             log.error("No %s found for %r", args.entity, args.filter)
             return
+        if args.method == 'usage':
+            if not args.entity == 'qualities':
+                log.error("Method 'usage' only available for qualities")
+                return
+            safeprint(entities.usage(args.format))
+            return
+
         if args.format == 'wiki':
             safeprint(entities.wikitable())
         elif args.format == 'wikipage':
@@ -288,6 +304,12 @@ class Entity(object):
             log.error("%r has no reference to a SunlessSea instance", self)
 
 
+    @property
+    def etype(self):
+        # Just a convenience. Provisional name (and method)
+        return self.__class__.__name__
+
+
     def dump(self):
         return self._data
 
@@ -296,7 +318,7 @@ class Entity(object):
         if self.name:
             return "{}\t{}".format(self.id, self.name)
         else:
-            return str(self.id)
+            return unicode(self.id)
 
 
     def pretty(self):
@@ -311,7 +333,7 @@ class Entity(object):
 
 
     def wiki(self):
-        return self.name or str(self.id)
+        return self.name or unicode(self.id)
 
 
     def wikirow(self):
@@ -513,6 +535,86 @@ class Quality(Entity):
         return pretty
 
 
+    def usage(self, formatting='pretty'):
+        '''
+        Shows all usages, that is: all events, actions, outcomes and shops
+        this appears as either a requirement, effect or tradable item
+
+        Highly experimental! Ugly output! Cryptic coding! Use at your own risk!
+            OTOH, this is awesome!
+        '''
+
+        if not formatting == 'pretty':
+            log.info("You don't want pretty, but that's what you'll get")
+
+        qid = self.id #111726  # 111370
+        results = {}
+        output = []
+        for e in self.ss.events:
+            for r in e.requirements:
+                if r.quality.id == qid:
+                    results.setdefault(e,
+                        dict(req=None, eff=None, act={}))['req'] = r
+                    break
+
+            for f in e.effects:
+                if r.quality.id == qid:
+                    results.setdefault(e,
+                        dict(req=None, eff=None, act={}))['eff'] = f
+                    break
+
+            for a in e.actions:
+                for r in a.requirements:
+                    if r.quality.id == qid:
+                        results.setdefault(e,
+                            dict(req=None, eff=None, act={}))['act'].setdefault(a,
+                                dict(req=None, out=[]))['req'] = r
+                        break
+
+                for o in a.outcomes:
+                    for f in o.effects:
+                        if f.quality.id == qid:
+                            results.setdefault(e,
+                                dict(req=None, eff=None, act={}))['act'].setdefault(a,
+                                    dict(req=None, out=[]))['out'].append((o, f))
+                            break
+
+        for s in self.ss.shops:
+            for i in s.items:
+                if qid in (i.item.id, i.currency.id):
+                    results[s] = i
+                    break
+
+        def _print(e, i=0, out=False):
+            if e:
+                if out:
+                    output.append("{}{}".format(i*'\t', ": ".join(unicode(_) for _ in e)))
+                else:
+                    output.append("{}{} {}".format(i*'\t', e.etype.upper(), e))
+            elif not i:  # lame
+                output.append('')
+
+        for e, r in sorted(results.iteritems()):
+            _print(e)
+
+            if e.etype == "Shop":
+                _print(r, 1)
+                _print("")
+                continue
+
+            _print(r['req'], 1)
+            _print(r['eff'], 1)
+            for a in r['act']:
+                _print(a, 1)
+                _print(r['act'][a]['req'], 2)
+                for o in r['act'][a]['out']:
+                    _print(o, 2, True)
+                _print("")
+            _print("")
+
+        return "\n".join(output).strip()
+
+
 
 class Location(Entity):
     _REQUIRED_FIELDS = set(('Name',))
@@ -584,7 +686,7 @@ class Shop(Entity):
     def pretty(self):
         pretty = super(Shop, self).pretty()
         locations = (
-            "\n\tLocation: {}".format(", ".join(str(_) for _ in
+            "\n\tLocation: {}".format(", ".join(unicode(_) for _ in
                                                 self.locations))
         ) if self.locations else ""
         items = "\n\t\t".join(_.pretty() for _ in self.items)
@@ -1245,6 +1347,13 @@ class Outcome(BaseEvent):
         return page
 
 
+    def __unicode__(self):
+        return "{} Outcome{}{}".format(
+            self.label,
+            iif(self.chance, " ({}% chance)".format(self.chance)),
+            iif(self.name, " '{}'".format(self.name)))
+
+
 
 class Entities(object):
     '''Base class for entity containers. Subclasses SHOULD override EntityCls!'''
@@ -1343,6 +1452,15 @@ class Entities(object):
 class Qualities(Entities):
     EntityCls=Quality
 
+    def usage(self, formatting='pretty'):
+        if formatting == 'wikipage':
+            func = 'wikipage'
+        else:
+            func = 'pretty'
+
+        return "\n\n\n\n".join(
+            "\n\n".join((getattr(_, func)(), indent(_.usage())))
+            for _ in self)
 
 
 class Locations(Entities):
