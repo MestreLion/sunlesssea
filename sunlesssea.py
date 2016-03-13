@@ -321,11 +321,11 @@ class Entity(object):
             return unicode(self.id)
 
 
-    def pretty(self):
+    def pretty(self, short=False):
         pretty = "{:d}".format(self.id)
         if self.name:        pretty += " - {}".format(self.name)
         if self.image:       pretty += " ({})".format(self.image)
-        if self.description:
+        if self.description and not short:
             # Trailing '\n' is intentional, blank line after Description
             pretty += "\n\t{}\n".format(self._desc(self.description))
         #pretty += "\n"
@@ -576,7 +576,7 @@ class Quality(Entity):
                         if f.quality.id == qid:
                             results.setdefault(e,
                                 dict(req=None, eff=None, act={}))['act'].setdefault(a,
-                                    dict(req=None, out=[]))['out'].append((o, f))
+                                    dict(req=None, out=[]))['out'].append(o)
                             break
 
         for s in self.ss.shops:
@@ -588,9 +588,9 @@ class Quality(Entity):
         def _print(e, i=0, out=False):
             if e:
                 if out:
-                    output.append("{}{}".format(i*'\t', ": ".join(unicode(_) for _ in e)))
+                    output.append(indent(e.pretty(short=True), 2))
                 else:
-                    output.append("{}{} {}".format(i*'\t', e.etype.upper(), e))
+                    output.append(indent("{} {}".format(e.etype.upper(), e), i))
             elif not i:  # lame
                 output.append('')
 
@@ -608,7 +608,7 @@ class Quality(Entity):
                 _print(a, 1)
                 _print(r['act'][a]['req'], 2)
                 for o in r['act'][a]['out']:
-                    _print(o, 2, True)
+                    _print(o, 3, True)
                 _print("")
             _print("")
 
@@ -997,8 +997,8 @@ class BaseEvent(Entity):
                          parent.id, iid)
 
 
-    def pretty(self, location=None):
-        pretty = super(BaseEvent, self).pretty()
+    def pretty(self, location=None, short=False):
+        pretty = super(BaseEvent, self).pretty(short=short)
 
         if location:
             pretty += "\n\tLocation: {}".format(self.location)
@@ -1008,12 +1008,18 @@ class BaseEvent(Entity):
             for item in self.requirements:
                 pretty += "{}\n".format(indent(item.pretty(), 2))
 
-        if getattr(self, 'effects', None):
-            pretty += "\n\tEffects: {:d}\n".format(len(self.effects))
-            for item in self.effects:
-                pretty += "{}\n".format(indent(item.pretty(), 2))
-
         return pretty
+
+    def _pretty_qualops(self, attr, short=False):
+        '''Pretty-format lists of Requirements and Effects'''
+        # not used... yet ;)
+        out = []
+        qualops = getattr(self, attr, None)
+        if qualops:
+            if not short:
+                out.append("\t{}: {:d}".format(attr.title(), len(qualops)))
+            out.extend(indent(_.pretty(),2) for _ in qualops)
+        return "\n".join(out)
 
 
     def _create_qualops(self, attr):
@@ -1082,8 +1088,13 @@ class Event(BaseEvent):
             self.actions.append(Action(data=item, idx=i, parent=self, ss=self.ss))
 
 
-    def pretty(self):
+    def pretty(self, short=False):
         pretty = super(Event, self).pretty(location=self.location)
+
+        if self.effects:
+            if not short:
+                pretty += "\n\tEffects: {:d}\n".format(len(self.effects))
+            pretty += indent("\n".join(_.pretty() for _ in self.effects)+'\n', 2)
 
         if self.actions:
             pretty += "\n\tActions: {:d}".format(len(self.actions))
@@ -1316,14 +1327,21 @@ class Outcome(BaseEvent):
         self.effects = list(self._create_qualops('effects'))
 
 
-    def pretty(self):
-        pretty = "{} Outcome{}:\n{}\n".format(
+    def pretty(self, short=False):
+        pretty = "{} outcome{}:\n{}".format(
             self.label,
             iif(self.chance, " ({}% chance)".format(self.chance)),
-            indent(super(Outcome, self).pretty(), 1))
+            indent(super(Outcome, self).pretty(short=True)+'\n') if not short else "",
+        )
+
+        if self.effects:
+            if not short:
+                pretty += "\n\tEffects: {:d}\n".format(len(self.effects))
+            pretty += indent("\n".join(_.pretty() for _ in self.effects),
+                             1 if short else 2) + '\n'
 
         if self.trigger:
-            pretty += "\t\tTrigger event: {} - {}\n".format(self.trigger.id,
+            pretty += "\tTrigger event: {} - {}\n".format(self.trigger.id,
                                                             self.trigger.name)
 
         return pretty
@@ -1461,6 +1479,7 @@ class Qualities(Entities):
         return "\n\n\n\n".join(
             "\n\n".join((getattr(_, func)(), indent(_.usage())))
             for _ in self)
+
 
 
 class Locations(Entities):
