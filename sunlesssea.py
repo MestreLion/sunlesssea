@@ -124,11 +124,11 @@ def parse_args(argv=None):
                        action="store_const",
                        help="Verbose mode, output extra info.")
 
-    group.add_argument('-c', '--check',
-                       dest='check',
-                       action="store_true",
-                       default=False,
-                       help="Verbose mode, output extra info.")
+    parser.add_argument('-c', '--check',
+                        dest='check',
+                        action="store_true",
+                        default=False,
+                        help="Perform integrity checks, takes about 20% longer.")
 
     parser.add_argument('-d', '--datadir',
                         dest='datadir',
@@ -191,7 +191,7 @@ def main(argv=None):
         elif args.format == 'dump':
             safeprint(entities.dump())
         else:
-            safeprint(entities.show())
+            safeprint(entities.bare())
         return
 
     elif args.entity == "demo":
@@ -274,6 +274,12 @@ class Entity(object):
 
     def dump(self):
         return self._data
+
+    def bare(self):
+        if self.name:
+            return "{}\t{}".format(self.id, self.name)
+        else:
+            return str(self.id)
 
     def pretty(self):
         pretty = "{:d}".format(self.id)
@@ -1214,8 +1220,8 @@ class Entities(object):
     def pretty(self):
         return "\n\n".join((_.pretty().strip() for _ in self))
 
-    def show(self):
-        return "\n".join((unicode(_) for _ in self))
+    def bare(self):
+        return "\n".join(_.bare() for _ in self)
 
     def get(self, eid, default=None):
         '''Get entity by ID'''
