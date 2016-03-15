@@ -610,7 +610,7 @@ class Quality(Entity):
                 for o in r['act'][a]['out']:
                     _print(o, 3, True)
                 _print("")
-            _print("")
+            #_print("")
 
         return "\n".join(output).strip()
 
@@ -744,9 +744,7 @@ class QualityOperator(Entity):
 
 
     def pretty(self):
-        return self._format("{id} - {name}{sep}{ops}{ifsep}{ifs}",
-                            "{id} - {name} += {qtyops}{ifsep}{ifs}",
-                            "{id} - {name} += ({qtyops}){ifsep}{ifs}")
+        return self._format()
 
 
     def wiki(self):
@@ -763,7 +761,7 @@ class QualityOperator(Entity):
 
 
     def _format(self,
-            # Defaults are suitable for __str__()
+            # Defaults are suitable for __unicode__() and pretty()
             qfmt="{name}{sep}{ops}{ifsep}{ifs}",
             qfmtqty="{name} += {qtyops}{ifsep}{ifs}",
             qfmtrev="{name} += ({qtyops}){ifsep}{ifs}",
@@ -772,17 +770,11 @@ class QualityOperator(Entity):
             lvlfmt="{:d}",
             lvladvfmt="{}",
             setfmt="= {}",  # ":= {}"
-            eqfmt ="= {}",  # "== {}"
-            adjfmt="= {v1} or {v2}",  # "== {v1} or {v2}"
-            minfmt="≥ {}",
-            maxfmt="≤ {}",
             ifminfmt="≥ {}",  # "if ≥ {}"
             ifmaxfmt="≤ {}",  # "if ≤ {}"
             ifeqfmt="= {}",  # "if == {}"
             ifadjfmt="= {v1} or {v2}",  # "if == {v1} or {v2}"
             elsefmt="{op}: {}",
-            chafmt="challenge ({} for 100%)",
-            chaadvfmt="challenge: ({diff})*100/{scaler}",
             opsep=" and ",
             qtyopsep=" + ",
             ifsep=", only if ",
@@ -794,11 +786,6 @@ class QualityOperator(Entity):
                                                          dfmt)
                                          if adv else value),
                                         *args, **kwargs))
-
-        def perc(val):
-            return (int(math.ceil(100.0 * val / self.quality.difficultyscaler))
-                    if val and self.quality.difficultyscaler
-                    else 'X')
 
         ops = {_:self.operator[_]
                for _ in self.operator
@@ -815,32 +802,7 @@ class QualityOperator(Entity):
 
             value = ops[op]
 
-            if op == 'MinLevel':
-                # Look-ahead for MaxLevel, to combine '> x and < x' into '== x'
-                val = ops.get('MaxLevel', None)
-                if val == value:
-                    add(eqfmt, value)
-                    ops.pop('MaxLevel')
-
-                # Look-ahead for adjacent values, combine into '== x or y'
-                elif val == value + 1:
-                    add(adjfmt, None, v1=value, v2=val)
-                    ops.pop('MaxLevel')
-
-                else:
-                    # Add the string snippet
-                    add(minfmt, value)
-
-            elif op == 'MinAdvanced':
-                # Look-ahead for equal values
-                val = ops.get('MaxAdvanced', None)
-                if val == value:
-                    add(eqfmt, value, True)
-                    ops.pop('MaxAdvanced')
-                else:
-                    add(minfmt, value, True)
-
-            elif op == 'OnlyIfAtLeast':
+            if op == 'OnlyIfAtLeast':
                 # Look-ahead, equal values
                 val = ops.get('OnlyIfNoMoreThan', None)
                 if val == value:
@@ -871,15 +833,6 @@ class QualityOperator(Entity):
 
                 qtyopstrs.append(self._parse_adv(val, advfmt, dfmt))
 
-            elif op == 'DifficultyAdvanced':
-                posopstrs.append(chaadvfmt.format(
-                    diff=self._parse_adv(value, advfmt, dfmt),
-                    scaler=self.quality.difficultyscaler))
-
-            elif op == 'MaxLevel':             add(maxfmt,    value)
-            elif op == 'MaxLevelAdvanced':     add(maxfmt,    value, True)
-            elif op == 'MaxAdvanced':          add(maxfmt,    value, True)
-            elif op == 'DifficultyLevel':      add(chafmt,    perc(value))
             elif op == 'SetToExactly':         add(setfmt,    value)
             elif op == 'SetToExactlyAdvanced': add(setfmt,    value, True)
 
@@ -957,6 +910,104 @@ class Requirement(QualityOperator):
         'MaxAdvanced',
     )
     _OPTIONAL_FIELDS = QualityOperator._OPTIONAL_FIELDS | set(_OPS)
+
+
+    def wiki(self):
+        return self._format(
+            "{{{{link icon|{quality.name}}}}}{sep}{ops}",
+            "{{{{challenge|{quality.name}|{}}}}}{opsep}{ops}",
+            "{{{{link icon|{quality.name}}}}} {ops}{opsep}challenge, for 100%:<br>\n"
+                ':<span style="color: teal;">[{}]*100/{quality.difficultyscaler}</span>',
+            advfmtq='([[{quality.name}]])',
+        )
+
+
+    def _format(self,
+            # Defaults are suitable for __unicode__()
+            fmt="{quality}{sep}{ops}",
+            fmtcha="{quality} challenge ({} for 100%){opsep}{ops}",
+            fmtchaadv="{quality} challenge: "
+                        "({})*100/{quality.difficultyscaler}{opsep}{ops}",
+            sep=" ",  # only if there are more operators
+            opsep=" and ",  # separator between operators
+            advfmtd="[1 to {}]", advfmtq="[{quality}]",  # Advanced format
+            # Known operators
+            minfmt="≥ {}",
+            maxfmt="≤ {}",
+            eqfmt ="= {}",
+            adjfmt="= {v1} or {v2}",
+            # Unknwn operator
+            elsefmt="{op}: {}",
+    ):
+
+        def add(fmt, value=None, adv=False, *args, **kwargs):
+            opstrs.append(fmt.format((self._parse_adv(str(value),
+                                                         advfmtq,
+                                                         advfmtd)
+                                         if adv else value),
+                                        *args, **kwargs))
+
+        ops = {_:self.operator[_]
+               for _ in self.operator
+               if _ not in self._HIDE_OP}
+        opstrs = []
+
+        # Loop in _OPS to preserve order
+        for op in self._OPS:
+            if op not in ops:
+                continue
+
+            value = ops[op]
+
+            if op == 'MinLevel':
+                # Look-ahead for MaxLevel, to combine '> x and < x' into '== x'
+                val = ops.get('MaxLevel', None)
+                if val == value:
+                    add(eqfmt, value)
+                    ops.pop('MaxLevel')
+
+                # Look-ahead for adjacent values, combine into '== x or y'
+                elif val == value + 1:
+                    add(adjfmt, None, v1=value, v2=val)
+                    ops.pop('MaxLevel')
+
+                else:
+                    # Add the string snippet
+                    add(minfmt, value)
+
+            elif op == 'MinAdvanced':
+                # Look-ahead for equal values
+                val = ops.get('MaxAdvanced', None)
+                if val == value:
+                    add(eqfmt, value, True)
+                    ops.pop('MaxAdvanced')
+                else:
+                    add(minfmt, value, True)
+
+            elif op == 'DifficultyLevel':
+                fmt   = fmtcha
+                value = (int(math.ceil(100.0 * value /
+                                      self.quality.difficultyscaler))
+                        if value and self.quality.difficultyscaler
+                        else 'X')
+
+            elif op == 'DifficultyAdvanced':
+                fmt   = fmtchaadv
+                value = self._parse_adv(value, advfmtq, advfmtd)
+
+            elif op == 'MaxLevel':         add(maxfmt, value)
+            elif op == 'MaxLevelAdvanced': add(maxfmt, value, True)
+            elif op == 'MaxAdvanced':      add(maxfmt, value, True)
+            else:
+                add(elsefmt, value, adv='Advanced' in op, op=op)
+
+        return fmt.format(value,
+                          quality=self.quality,
+                          operator=self.operator,
+                          sep=iif(opstrs, sep),
+                          opsep=iif(opstrs, opsep),
+                          ops=opsep.join(opstrs),
+        )
 
 
 
@@ -1148,10 +1199,10 @@ class Event(BaseEvent):
         actions = (
             '===Interactions===\n'
             '{{| class="ss-table" style="width: 100%;"\n'
-            '! style="width:10%;" | Interaction\n'
-            '! style="width:20%;" | Unlocked by\n'
-            '! style="width:20%;" | Effects\n'
-            '! style="width:10%;" | Notes\n'
+            '! style="width:20%;" | Interaction\n'
+            '! style="width:30%;" | Unlocked by\n'
+            '! style="width:30%;" | Effects\n'
+            '! style="width:20%;" | Notes\n'
             '\n'
             '{}\n'
             '|-\n|}}'
@@ -1477,7 +1528,7 @@ class Qualities(Entities):
             func = 'pretty'
 
         return "\n\n\n\n".join(
-            "\n\n".join((getattr(_, func)(), indent(_.usage())))
+            "\n\n".join((indent(getattr(_, func)(),0), indent(_.usage())))
             for _ in self)
 
 
