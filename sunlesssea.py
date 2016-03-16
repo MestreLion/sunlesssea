@@ -585,14 +585,32 @@ class Quality(Entity):
                     results[s] = i
                     break
 
-        def _print(e, i=0, out=False):
-            if e:
-                if out:
-                    output.append(indent(e.pretty(short=True), 2))
-                else:
-                    output.append(indent("{} {}".format(e.etype.upper(), e), i))
-            elif not i:  # lame
-                output.append('')
+        def _print(e, i=0):
+            if not e:  # No object (None) or blank line ("")
+                if not i:
+                    output.append("")
+                return
+
+            if e.etype == "Outcome":
+                out = e.pretty(short=True)
+            elif e.etype == "Event":
+                out = "{} {}{}".format(
+                        e.etype.upper(), e,
+                        " [{}]".format(e.location)
+                            if e.location else "",
+                )
+            elif e.etype == "Shop":
+                out = "{} {}{}".format(
+                        e.etype.upper(), e,
+                        " [{}]".format(", ".join(unicode(_)
+                                                 for _ in e.locations))
+                            if e.locations else "",
+                )
+            else:
+                out = "{} {}".format(e.etype.upper(), e)
+
+            output.append(indent(out, i))
+
 
         for e, r in sorted(results.iteritems()):
             _print(e)
@@ -608,7 +626,7 @@ class Quality(Entity):
                 _print(a, 1)
                 _print(r['act'][a]['req'], 2)
                 for o in r['act'][a]['out']:
-                    _print(o, 3, True)
+                    _print(o, 2)
                 _print("")
             #_print("")
 
