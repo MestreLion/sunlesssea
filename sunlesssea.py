@@ -24,7 +24,9 @@
 # Ideas
 # - pretty(short=True), so they can use each other
 #    Ex: Location.pretty(short=True) does not print description
-# - make pretty uniform across indent, \n, etc. Almost there already
+# - make pretty uniform across indent, \n, etc. Not there already
+#    Idea: functions return with trailing '\n' if there is content
+#        Callers can .strip() if they want or "".join() directly
 # - format +[1 to x] so it can use {{qty}} to get non-text color
 # - read text statuses on numeric quality assignments/tests
 #    so "QualityX := 3" => "QualityX := 3, [3's Status Description]"
@@ -76,11 +78,14 @@ def format_obj(fmt, obj, *args, **kwargs):
 
 
 def indent(text, level=1, pad='\t'):
-    '''Indent a text. As a side-effect it also rstrips (right-trim) whitespaces'''
+    '''Indent a text. As a side-effect it also strip trailing whitespace,
+        even for level = 0
+    '''
     if not level:
-        return text
+        return text.rstrip()
     indent = level * pad
-    return "{}{}".format(indent, ('\n'+indent).join(text.rstrip().split('\n')))
+    return "{}{}".format(indent,
+                         ('\n'+indent).join(text.rstrip().split('\n')))
 
 
 
@@ -1085,15 +1090,22 @@ class BaseEvent(Entity):
 
         return pretty
 
+
     def _pretty_qualops(self, attr, short=False):
-        '''Pretty-format lists of Requirements and Effects'''
-        # not used... yet ;)
+        '''Pretty-format lists of Requirements and Effects
+            - Does NOT add leading '\n'
+            - DOES add trailing '\n' IF there is content
+            - Does NOT indent the optional header
+            - Indent list IF there is a header
+        '''
         out = []
         qualops = getattr(self, attr, None)
         if qualops:
             if not short:
-                out.append("\t{}: {:d}".format(attr.title(), len(qualops)))
-            out.extend(indent(_.pretty(),2) for _ in qualops)
+                out.append("{}: {:d}".format(attr.title(), len(qualops)))
+            # rely on indent() to rtrip each line
+            out.extend(indent(_.pretty(), 0 if short else 1) for _ in qualops)
+            out.append("")  # add trailing '\n' only if here IS content
         return "\n".join(out)
 
 
@@ -1164,19 +1176,16 @@ class Event(BaseEvent):
 
 
     def pretty(self, short=False):
-        pretty = super(Event, self).pretty(location=self.location)
+        out = [super(Event, self).pretty(location=self.location,
+                                         short=short).strip()]
 
-        if self.effects:
-            if not short:
-                pretty += "\n\tEffects: {:d}\n".format(len(self.effects))
-            pretty += indent("\n".join(_.pretty() for _ in self.effects)+'\n', 2)
+        out.append(indent(self._pretty_qualops('effects', short=short)))
 
         if self.actions:
-            pretty += "\n\tActions: {:d}".format(len(self.actions))
-            for item in self.actions:
-                pretty += "\n{}\n".format(indent(item.pretty(), 2))
+            out.append("\tActions: {:d}".format(len(self.actions)))
+            out.append("\n\n".join(indent(_.pretty(), 2) for _ in self.actions))
 
-        return pretty
+        return "\n".join(filter(None, out)) + '\n'
 
 
     def wikipage(self):
@@ -1403,23 +1412,20 @@ class Outcome(BaseEvent):
 
 
     def pretty(self, short=False):
-        pretty = "{} outcome{}:\n{}".format(
-            self.label,
-            iif(self.chance, " ({}% chance)".format(self.chance)),
-            indent(super(Outcome, self).pretty(short=True)+'\n') if not short else "",
-        )
+        out = ["{} outcome{}:".format(self.label,
+            iif(self.chance, " ({}% chance)".format(self.chance)))
+        ]
 
-        if self.effects:
-            if not short:
-                pretty += "\n\tEffects: {:d}\n".format(len(self.effects))
-            pretty += indent("\n".join(_.pretty() for _ in self.effects),
-                             1 if short else 2) + '\n'
+        if not short:
+            out.append(indent(super(Outcome, self).pretty(short=True)))
+
+        out.append(indent(self._pretty_qualops('effects', short=short)))
 
         if self.trigger:
-            pretty += "\tTrigger event: {} - {}\n".format(self.trigger.id,
-                                                            self.trigger.name)
+            out.append("\tTrigger event: {} - {}".format(self.trigger.id,
+                                                         self.trigger.name))
 
-        return pretty
+        return "\n".join(filter(None, out)) + '\n'
 
 
     def wiki(self):
