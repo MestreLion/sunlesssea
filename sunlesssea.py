@@ -773,9 +773,7 @@ class QualityOperator(Entity):
             lvlfmt="{:+d}",
             lvladvfmt="+{}",
             advfmt='([[{name}]])',
-            chafmt="challenge ({{{{action|{}}}}} for 100%)",
-            chaadvfmt=('challenge:<br>\n:<span style="color: teal;">'
-                       '[{diff}]*100/{scaler}</span> for 100%'))
+        )
 
 
     def _format(self,
@@ -934,8 +932,11 @@ class Requirement(QualityOperator):
         return self._format(
             "{{{{link icon|{quality.name}}}}}{sep}{ops}",
             "{{{{challenge|{quality.name}|{}}}}}{opsep}{ops}",
-            "{{{{link icon|{quality.name}}}}} {ops}{opsep}challenge, for 100%:<br>\n"
-                ':<span style="color: teal;">[{}]*100/{quality.difficultyscaler}</span>',
+            "{{{{link icon|{quality.name}}}}} challenge"
+                " ({{{{action|{}%}}}} chance to win){opsep}{ops}",
+            "{{{{link icon|{quality.name}}}}} {ops}{opsep}challenge,"
+                " for 100%:<br>\n:<span style=\"color: teal;\">"
+                "[{}]*100/{quality.difficultyscaler}</span>",
             advfmtq='([[{quality.name}]])',
         )
 
@@ -944,6 +945,7 @@ class Requirement(QualityOperator):
             # Defaults are suitable for __unicode__()
             fmt="{quality}{sep}{ops}",
             fmtcha="{quality} challenge ({} for 100%){opsep}{ops}",
+            fmtchaluck="{quality} challenge ({}%){opsep}{ops}",
             fmtchaadv="{quality} challenge: "
                         "({})*100/{quality.difficultyscaler}{opsep}{ops}",
             sep=" ",  # only if there are more operators
@@ -1003,11 +1005,15 @@ class Requirement(QualityOperator):
                     add(minfmt, value, True)
 
             elif op == 'DifficultyLevel':
-                fmt   = fmtcha
-                value = (int(math.ceil(100.0 * value /
-                                      self.quality.difficultyscaler))
-                        if value and self.quality.difficultyscaler
-                        else 'X')
+                if self.quality.category == 2000:  # "Luck", ID=432
+                    fmt   = fmtchaluck
+                    value = 50 - value * self.quality.difficultyscaler
+                else:
+                    fmt = fmtcha
+                    value = (int(math.ceil(100.0 * value /
+                                          self.quality.difficultyscaler))
+                            if value and self.quality.difficultyscaler
+                            else value)
 
             elif op == 'DifficultyAdvanced':
                 fmt   = fmtchaadv
