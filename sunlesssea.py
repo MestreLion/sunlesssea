@@ -552,7 +552,7 @@ class Quality(Entity):
         if not formatting == 'pretty':
             log.info("You don't want pretty, but that's what you'll get")
 
-        qid = self.id #111726  # 111370
+        qid = self.id
         results = {}
         output = []
         for e in self.ss.events:
@@ -587,8 +587,7 @@ class Quality(Entity):
         for s in self.ss.shops:
             for i in s.items:
                 if qid in (i.item.id, i.currency.id):
-                    results[s] = i
-                    break
+                    results.setdefault(s, []).append(i)
 
         def _print(e, i=0):
             if not e:  # No object (None) or blank line ("")
@@ -621,7 +620,8 @@ class Quality(Entity):
             _print(e)
 
             if e.etype == "Shop":
-                _print(r, 1)
+                for i in r:
+                    _print(i, 1)
                 _print("")
                 continue
 
