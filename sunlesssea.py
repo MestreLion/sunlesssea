@@ -736,7 +736,7 @@ class QualityOperator(Entity):
     _OPTIONAL_FIELDS = set()
     _IGNORED_FIELDS  = _HIDE_OP
 
-    _reverse = ('Terror', 'Hunger', 'Menaces: Wounds')
+    _reverse = (r'Terror$', r'Hunger$', r'Menaces:')
 
 
     def __init__(self, data, idx=0, parent=None, ss=None):
@@ -861,7 +861,7 @@ class QualityOperator(Entity):
                 add(elsefmt, value, adv='Advanced' in op, op=op)
 
         if useqty:
-            if self.quality.name in self._reverse:
+            if any(re.match(_, self.quality.name) for _ in self._reverse):
                 qfmt = qfmtrev
             else:
                 qfmt = qfmtqty
