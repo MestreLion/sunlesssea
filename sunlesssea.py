@@ -1666,6 +1666,7 @@ class SaveQualities(Entities):
 class Save(object):
     def __init__(self, data=None, ss=None, path=None):
         self._data = data
+        self.path  = path
         self.ss    = ss
 
         self.qualities = SaveQualities(
@@ -1674,11 +1675,17 @@ class Save(object):
            save=self,
         )
 
+
     def dump(self):
         return self._data
 
+
     def save(self):
-        pass
+        try:
+            with open(self.path, "w") as fd:
+                json.dump(self._data, fd, separators=(',',':'))
+        except IOError as e:
+            log.error("Could not save: %s", e)
 
 
 
