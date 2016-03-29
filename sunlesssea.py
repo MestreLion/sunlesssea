@@ -317,9 +317,9 @@ class Entity(object):
         return self._data
 
 
-    def bare(self):
+    def bare(self, sep='\t'):
         if self.name:
-            return "{}\t{}".format(self.id, self.name)
+            return "{}{}{}".format(self.id, sep, self.name)
         else:
             return unicode(self.id)
 
@@ -1587,6 +1587,86 @@ class Events(Entities):
 
 
 
+class SaveQuality(object):
+    def __init__(self, data=None, idx=0, save=None, ss=None):
+        self._data = data
+        self.idx   = idx
+        self.ss    = ss
+
+        # To make SaveQualities.get() work
+        self.id  = self._data['AssociatedQualityId']
+
+        self.quality = ss.qualities.get(self.id)
+        if not self.quality:
+            # Create a dummy one
+            self.quality = Quality(data={'Id': self.id, 'Name':''},
+                                   ss=self.ss)
+            log.warning("Could not find Quality for %r[%d]: %d",
+                        save, idx, self.id)
+
+
+    @property
+    def name(self):
+        # To make SaveQualities.find() work
+        return self.quality.name
+
+
+    @property
+    def value(self):
+        return self._data['Level']
+
+
+    @value.setter
+    def value(self, value):
+        self._data['Level'] = int(value)
+
+
+    def __unicode__(self):
+        return "{0.quality} = {0.value}".format(self)
+
+
+    def __str__(self):
+        return self.__unicode__().encode('utf-8')
+
+
+    def __repr__(self):
+        if self.quality.name:
+            return b"<{cls} {qid}: {qname!r} = {value!r}>".format(
+                cls   = self.__class__.__name__,
+                qid   = self.quality.id,
+                qname = self.quality.name,
+                value = self.value)
+        else:
+            return b"<{cls} {qid} = {value!r}>".format(
+                cls   = self.__class__.__name__,
+                qid   = self.quality.id,
+                qname = self.quality.name,
+                value = self.value)
+
+
+
+class SaveQualities(Entities):
+    EntityCls = SaveQuality
+
+    def __init__(self, *args, **kwargs):
+        self.save = kwargs.get('save', None)
+        super(SaveQualities, self).__init__(*args, **kwargs)
+
+
+
+class Save(object):
+    def __init__(self, data=None, ss=None):
+        self._data = data
+        self.ss    = ss
+
+        self.qualities = SaveQualities(
+           data=self._data['QualitiesPossessedList'],
+           ss=self.ss,
+           save=self,
+        )
+
+
+
 class SunlessSea(object):
     '''
         Manager class, the one that loads the JSON files
@@ -1598,6 +1678,8 @@ class SunlessSea(object):
         self.qualities = Qualities(data=self._load('qualities', datadir), ss=self)
         self.locations = Locations(data=self._load('areas',     datadir), ss=self)
         self.events    = Events(   data=self._load('events',    datadir), ss=self)
+        self.autosave  = Save(     data=self._load('Autosave',  datadir,
+                                                   'saves', ""),          ss=self)
 
         # Not yet a first-class citizen
         self.settings  = self._create_settings(datadir)
@@ -1679,10 +1761,10 @@ class SunlessSea(object):
         return settings
 
 
-    def _load(self, entity, datadir=None, subdir='entities'):
+    def _load(self, entity, datadir=None, subdir='entities', suffix="_import"):
         path = os.path.join(datadir or get_datadir(),
                             subdir,
-                            "{}_import.json".format(entity))
+                            "{}{}.json".format(entity, suffix))
         log.debug("Opening data file for '%-9s': %s", entity, path)
         try:
             with open(path) as fd:
