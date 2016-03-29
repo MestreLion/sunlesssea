@@ -1457,9 +1457,11 @@ class Entities(object):
     EntityCls=Entity
 
 
-    def __init__(self, data=None, entities=None, ss=None, *eargs, **ekwargs):
+    def __init__(self, data=None, entities=None, path=None, ss=None,
+                 *eargs, **ekwargs):
         self._entities = {}
         self._order = []
+        self.path = path
         self.ss = ss
 
         if entities is None:
@@ -1480,7 +1482,9 @@ class Entities(object):
         '''
         if not name:
             return self
-        return self.__class__(entities=(_ for _ in self
+        return self.__class__(path=self.path,
+                              ss=self.ss,
+                              entities=(_ for _ in self
                                         if re.search(name, _.name,
                                                      re.IGNORECASE)))
 
@@ -1503,7 +1507,7 @@ class Entities(object):
 
 
     def dump(self):
-        return "\n".join((_.dump() for _ in self))
+        return [_.dump() for _ in self]
 
 
     def pretty(self):
@@ -1523,8 +1527,9 @@ class Entities(object):
         if isinstance(val, int):
             return self._order[val]
         else:
-            return self.__class__(entities=self._order[val],
-                                  ss=self.ss)
+            return self.__class__(path=self.path,
+                                  ss=self.ss,
+                                  entities=self._order[val])
 
 
     def __iter__(self):
@@ -1621,6 +1626,10 @@ class SaveQuality(object):
         self._data['Level'] = int(value)
 
 
+    def dump(self):
+        return self._data
+
+
     def __unicode__(self):
         return "{0.quality} = {0.value}".format(self)
 
@@ -1655,7 +1664,7 @@ class SaveQualities(Entities):
 
 
 class Save(object):
-    def __init__(self, data=None, ss=None):
+    def __init__(self, data=None, ss=None, path=None):
         self._data = data
         self.ss    = ss
 
@@ -1664,6 +1673,12 @@ class Save(object):
            ss=self.ss,
            save=self,
         )
+
+    def dump(self):
+        return self._data
+
+    def save(self):
+        pass
 
 
 
@@ -1675,18 +1690,18 @@ class SunlessSea(object):
 
 
     def __init__(self, datadir=None):
-        self.qualities = Qualities(data=self._load('qualities', datadir), ss=self)
-        self.locations = Locations(data=self._load('areas',     datadir), ss=self)
-        self.events    = Events(   data=self._load('events',    datadir), ss=self)
-        self.autosave  = Save(     data=self._load('Autosave',  datadir,
-                                                   'saves', ""),          ss=self)
+        self.datadir = datadir or get_datadir()
+        self.qualities = Qualities(ss=self, **self._load('qualities'))
+        self.locations = Locations(ss=self, **self._load('areas'))
+        self.events    = Events(   ss=self, **self._load('events'))
+        self.autosave  = Save(     ss=self, **self._load('Autosave', 'saves', ''))
 
         # Not yet a first-class citizen
-        self.settings  = self._create_settings(datadir)
+        self.settings = self._create_settings()
 
         # First class, requires self.settings, constructor still messy
-        self.shops     = Shops(entities=(_ for _ in self._create_shop(datadir)), ss=self)
-        self.ports     = None  # soon!
+        self.shops = Shops(entities=(_ for _ in self._create_shop()), ss=self)
+        self.ports = None  # soon!
 
         # Add 'LinkToEvent' references
         for event in self.events:
@@ -1709,9 +1724,9 @@ class SunlessSea(object):
                               event, action, outcome, trigger)
 
 
-    def _create_shop(self, datadir):
+    def _create_shop(self):
         i = 0  # lame
-        exchanges = self._load('exchanges', datadir)
+        exchanges = self._load('exchanges')['data']
         for exchange in exchanges:
             locations = set(_l
                             for _ in exchange['SettingIds'] if _ in self.settings
@@ -1722,11 +1737,11 @@ class SunlessSea(object):
                 yield Shop(data=shop, idx=i, ss=self, locations=locations)
 
 
-    def _create_settings(self, datadir):
+    def _create_settings(self):
         # Deal with the tiles, settings, areas, locations and ports mess
         settings = {}
         areas={}  # Integrity check only
-        tiles = self._load('Tiles', datadir, subdir='geography')
+        tiles = self._load('Tiles', subdir='geography')['data']
         for item, aid, sid in (((_['Name'], _t['Name'], _p['Name']),
                                 _p['Area']['Id'],
                                 _p['Setting']['Id'])
@@ -1761,18 +1776,18 @@ class SunlessSea(object):
         return settings
 
 
-    def _load(self, entity, datadir=None, subdir='entities', suffix="_import"):
-        path = os.path.join(datadir or get_datadir(),
+    def _load(self, entity, subdir='entities', suffix="_import"):
+        path = os.path.join(self.datadir,
                             subdir,
                             "{}{}.json".format(entity, suffix))
         log.debug("Opening data file for '%-9s': %s", entity, path)
         try:
             with open(path) as fd:
                 # strict=False to allow tabs inside strings
-                return json.load(fd, strict=False)
+                return dict(path=path, data=json.load(fd, strict=False))
         except IOError as e:
             log.error("Could not load data file for '%s': %s", entity, e)
-            return {}
+            return dict(path=path, data={})
 
 
 
