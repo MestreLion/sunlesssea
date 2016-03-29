@@ -34,6 +34,10 @@
 # - Improve (or even completely deprecate) format_obj using better .format()
 #    specs and ideas from http://code.activestate.com/recipes/577227/
 # - Quality need a custom wikipage() with {{quality status}} listings
+# - Improve usage():
+#    - Look for "[q:{id}]" in Advanced operators
+#    - show all Event and Action Requirements, as well as all Outcomes.
+#        (as a side-effect, will dramatically simplify the code)
 
 from __future__ import unicode_literals, print_function
 
@@ -55,7 +59,7 @@ TEST_INTEGRITY = False
 
 
 
-####################################################################################
+################################################################################
 # General helper functions
 
 def safeprint(text=""):
@@ -98,7 +102,7 @@ def iif(cond, trueval, falseval=""):
 
 
 
-####################################################################################
+################################################################################
 # Main() and helpers
 
 def get_datadir():
@@ -243,16 +247,10 @@ def main(argv=None):
             safeprint(repr(event))
         return
 
-    # Testing area..
-    #event = ss.events.get(208079)
-    #safeprint(event.pretty())
-    #safeprint(event.wikipage())
-    #safeprint(ss.events.wikitable())
 
 
 
-
-####################################################################################
+################################################################################
 # Classes
 
 class Entity(object):
@@ -1697,7 +1695,7 @@ class SunlessSea(object):
 
 
 
-####################################################################################
+################################################################################
 # Import guard
 
 if __name__ == '__main__':
