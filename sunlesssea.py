@@ -174,7 +174,7 @@ def parse_args(argv=None):
 
     parser.add_argument('-e', '--entity',
                         dest='entity',
-                        choices=('locations', 'qualities', 'events', 'shops'),
+                        choices=('locations', 'qualities', 'events', 'shops', 'autosave'),
                         default='test',
                         metavar="ENTITY",
                         help="Entity to work on."
@@ -231,6 +231,10 @@ def main(argv=None):
         else:
             safeprint(entities.bare())
         return
+
+    elif args.entity == "autosave":
+        for _ in ss.autosave.qualities.find(args.filter):
+            safeprint(_)
 
     elif args.entity == "demo":
         for event in ss.events.at(name="Pigmote Isle"):  # ID = 102804
