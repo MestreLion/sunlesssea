@@ -1613,6 +1613,10 @@ class SaveQuality(object):
             log.warning("Could not find Quality for %r[%d]: %d",
                         save, idx, self.id)
 
+        # Modifier is a value added to (base) value
+        # For example Engine Power and Stats enhancements
+        self.modifier =  self._data['EffectiveLevelModifier']
+
 
     @property
     def name(self):
@@ -1635,7 +1639,11 @@ class SaveQuality(object):
 
 
     def __unicode__(self):
-        return "{0.quality} = {0.value}".format(self)
+        modstr = ""
+        if self.modifier:
+            modstr = " + {} = {}".format(self.modifier,
+                                         self.value + self.modifier)
+        return "{0.quality} = {0.value}{1}".format(self, modstr)
 
 
     def __str__(self):
