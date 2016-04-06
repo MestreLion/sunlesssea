@@ -49,6 +49,7 @@ import logging
 import json
 import re
 import math
+import collections
 
 
 log = logging.getLogger(os.path.basename(os.path.splitext(__file__)[0]))
@@ -1713,7 +1714,8 @@ class SunlessSea(object):
         self.qualities = Qualities(ss=self, **self._load('qualities'))
         self.locations = Locations(ss=self, **self._load('areas'))
         self.events    = Events(   ss=self, **self._load('events'))
-        self.autosave  = Save(     ss=self, **self._load('Autosave', 'saves', ''))
+        self.autosave  = Save(     ss=self, **self._load('Autosave', 'saves',
+                                                         '', ordered=True))
 
         # Not yet a first-class citizen
         self.settings = self._create_settings()
@@ -1795,7 +1797,7 @@ class SunlessSea(object):
         return settings
 
 
-    def _load(self, entity, subdir='entities', suffix="_import"):
+    def _load(self, entity, subdir='entities', suffix="_import", ordered=False):
         path = os.path.join(self.datadir,
                             subdir,
                             "{}{}.json".format(entity, suffix))
@@ -1803,7 +1805,9 @@ class SunlessSea(object):
         try:
             with open(path) as fd:
                 # strict=False to allow tabs inside strings
-                return dict(path=path, data=json.load(fd, strict=False))
+                return dict(path=path, data=json.load(fd, strict=False,
+                        object_pairs_hook=(collections.OrderedDict
+                                           if ordered else None)))
         except IOError as e:
             log.error("Could not load data file for '%s': %s", entity, e)
             return dict(path=path, data={})
