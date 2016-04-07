@@ -166,7 +166,7 @@ def parse_args(argv=None):
 
     parser.add_argument('-m', '--method',
                         dest='method',
-                        choices=('usage'),
+                        choices=('usage',),
                         #default='test',
                         metavar="METHOD",
                         help="Method (operation) to execute. Not all entities have all methods"
@@ -979,6 +979,7 @@ class Requirement(QualityOperator):
                for _ in self.operator
                if _ not in self._HIDE_OP}
         opstrs = []
+        value  = ""
 
         # Loop in _OPS to preserve order
         for op in self._OPS:
