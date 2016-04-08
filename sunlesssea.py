@@ -555,12 +555,22 @@ class Quality(Entity):
     def pretty(self):
         pretty = super(Quality, self).pretty()
 
+        pretty += "\n\tCategory: {}".format(self.category)
+        if self.tag:
+            pretty += "\n\tTag: {}".format(self.tag)
+
+        if self.assign:
+            pretty += "\n\tAssignable to {} slot".format(self.assign)
+
+        if self.isslot:
+            pretty += "\n\tIs a slot"
+
         for attr, _, caption in self._status_fields:
             statuses = getattr(self, attr)
             if statuses:
-                pretty += "\n\t{}: {:d}\n".format(caption, len(statuses))
+                pretty += "\n\n\t{}: {:d}".format(caption, len(statuses))
                 for status in sorted(statuses.iteritems()):
-                    pretty += "\t\t[{}] - {}\n".format(*status)
+                    pretty += "\n\t\t[{}] - {}".format(*status)
 
         return pretty
 
@@ -1699,7 +1709,13 @@ class SaveQuality(object):
         if self.modifier:
             modstr = " + {} = {}".format(self.modifier,
                                          self.value + self.modifier)
-        return "{0.id} {0.quality} = {0.value}{1}".format(self, modstr)
+
+        equipstr = ""
+        if self.quality.isslot:
+            equipstr = " [{}]".format(self.equipped or "")
+
+        return ("{self.id}\t{self.quality} = {self.value}"
+                "{modstr}{equipstr}".format(**locals()))
 
 
     def __str__(self):
