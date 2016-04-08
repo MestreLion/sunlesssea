@@ -523,6 +523,8 @@ class Quality(Entity):
         for attr, key, _ in self._status_fields:
             setattr(self, attr, self._parse_status(self._data.get(key, "")))
 
+        self.assign = self._data.get('AssignToSlot', {}).get('Id', None)
+
 
     def _parse_status(self, value):
         if not value:
@@ -1725,16 +1727,31 @@ class SunlessSea(object):
         self.shops = Shops(entities=(_ for _ in self._create_shop()), ss=self)
         self.ports = None  # soon!
 
+        # Add 'AssignToSlot' references
+        for quality in self.qualities:
+            slot = quality.assign
+            if slot is None:
+                continue
+
+            quality.assign = self.qualities.get(slot)
+            if quality.assign is not None:
+                continue
+
+            # Create a dummy one
+            quality.assign = Quality(ss=self, data=dict(Id=slot, Name=""))
+            log.error("%r assigns to a non-existant slot: %d",
+                      quality, slot)
+
         # Add 'LinkToEvent' references
         for event in self.events:
             for action in event.actions:
                 for outcome in action.outcomes:
                     trigger = outcome.trigger
-                    if type(trigger) is not int:
+                    if trigger is None:
                         continue
 
                     outcome.trigger = self.events.get(trigger)
-                    if outcome.trigger:
+                    if outcome.trigger is not None:
                         continue
 
                     # Create a dummy one
