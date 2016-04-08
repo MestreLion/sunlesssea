@@ -525,6 +525,26 @@ class Quality(Entity):
 
         self.assign = self._data.get('AssignToSlot', {}).get('Id', None)
 
+        if TEST_INTEGRITY:
+            if self.assign and self.category not in (
+                  106,  # Officers
+                  150,  # Curiosities (Zong of Zee and mis-categorized officers)
+                  200,  # Cargo (assignable items are Equipments)
+                10000,  # Ships
+            ):
+                log.error("Category mismatch for %r: %d, assigns to %s",
+                          self, self.category, self.assign)
+
+            if (
+                (self.category == 106  and not self.tag == "Officer") or
+                (self.tag == "Officer" and not self.category == 106 ) or
+
+                (self.category == 10000 and not self.tag == "Ship"    ) or
+                (self.tag == "Ship"     and not self.category == 10000)
+            ):
+                log.error("Category and tag mismatch for %r: %d, '%s'",
+                          self, self.category, self.tag)
+
 
     def _parse_status(self, value):
         if not value:
@@ -1637,6 +1657,22 @@ class SaveQuality(object):
                 log.warning("Could not find Quality equipped to %s slot: %d",
                             self.name, qid)
 
+        if TEST_INTEGRITY:
+            if self.equipped and not self.quality.isslot:
+                log.error("%r is not a slot but has a quality equipped: %r",
+                          self, self.equipped)
+
+            e = self._data['EquippedPossession']
+            if e:  # e is None for non-slots or slots with nothing equipped on.
+                qid1 =  e['AssociatedQualityId']
+                qid2 = (e['AssociatedQuality'] or {'Id':None})['Id']
+                if not (qid1 or qid2):
+                    log.error("No quality assigned to equipped slot %r", self)
+
+                if qid2 and not qid2 == qid1:
+                    log.error("Equipped quality and ID mismatch in %r: %s, %s",
+                              self, qid1, qid2)
+
 
     @property
     def name(self):
@@ -1777,6 +1813,13 @@ class SunlessSea(object):
                                                       QualitiesRequired=[]))
                     log.error("%r.%r.%r links to a non-existant event: %d",
                               event, action, outcome, trigger)
+
+        if TEST_INTEGRITY:
+            for item in self.autosave.qualities:
+                if item.equipped and item.equipped.assign is not item.quality:
+                    log.error("Autosave slot %r has %r equipped, but that is"
+                              " assignable to slot %r",
+                              item, item.equipped, item.equipped.assign)
 
 
     def _create_shop(self):
