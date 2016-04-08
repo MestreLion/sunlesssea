@@ -752,7 +752,7 @@ class QualityOperator(Entity):
         self.operator = {_:data[_] for _ in data
                          if _ not in self._NOT_OP}
 
-        qid = data['AssociatedQuality']['Id']
+        qid = self._data['AssociatedQuality']['Id']
         if self.ss and self.ss.qualities:
             self.quality = self.ss.qualities.get(qid)
 
@@ -1609,13 +1609,15 @@ class SaveQuality(object):
         # To make SaveQualities.get() work
         self.id  = self._data['AssociatedQualityId']
 
-        self.quality = ss.qualities.get(self.id)
-        if not self.quality:
-            # Create a dummy one
-            self.quality = Quality(data={'Id': self.id, 'Name':''},
-                                   ss=self.ss)
-            log.warning("Could not find Quality for %r[%d]: %d",
-                        save, idx, self.id)
+        self.quality  = None
+        if self.ss and self.ss.qualities:
+            self.quality = self.ss.qualities.get(self.id)
+            if not self.quality:
+                # Create a dummy one
+                self.quality = Quality(data={'Id': self.id, 'Name':''},
+                                       ss=self.ss)
+                log.warning("Could not find Quality for %r[%d]: %d",
+                            save, idx, self.id)
 
         # Modifier is a value added to (base) value
         # For example Engine Power and Stats enhancements
@@ -1647,7 +1649,7 @@ class SaveQuality(object):
         if self.modifier:
             modstr = " + {} = {}".format(self.modifier,
                                          self.value + self.modifier)
-        return "{0.quality} = {0.value}{1}".format(self, modstr)
+        return "{0.id} {0.quality} = {0.value}{1}".format(self, modstr)
 
 
     def __str__(self):
