@@ -1623,6 +1623,20 @@ class SaveQuality(object):
         # For example Engine Power and Stats enhancements
         self.modifier =  self._data['EffectiveLevelModifier']
 
+        # Equipped is the quality currently assigned to a slot
+        # For Officers, Ship Equipment and Current Ship
+        self.equipped = None
+        qid = (self._data['EquippedPossession'] or {}).get('AssociatedQualityId', 0)
+        if qid and self.ss and self.ss.qualities:
+            self.equipped = self.ss.qualities.get(qid)
+
+            if not self.equipped:
+                # Create a dummy one
+                self.equipped = Quality(data={'Id': qid, 'Name':''},
+                                        ss=self.ss)
+                log.warning("Could not find Quality equipped to %s slot: %d",
+                            self.name, qid)
+
 
     @property
     def name(self):
