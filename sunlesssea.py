@@ -39,9 +39,6 @@
 #    - show all Event and Action Requirements, as well as all Outcomes.
 #        (as a side-effect, will dramatically simplify the code)
 
-from __future__ import unicode_literals, print_function
-
-
 import sys
 import os
 import argparse
@@ -70,7 +67,7 @@ def safeprint(text=""):
     # defaults to None in Python 2.7, so ascii is used (ew!).
     # In this case we encode to UTF-8.
     # See https://stackoverflow.com/questions/492483
-    print(unicode(text).encode(sys.stdout.encoding or 'UTF-8'))
+    print(text)
 
 
 
@@ -78,7 +75,7 @@ def format_obj(fmt, obj, *args, **kwargs):
     objdict = {_:getattr(obj, _) for _ in vars(obj) if not _.startswith('_')}
     objdict.update(dict(str=str(obj), repr=repr(obj)))
     objdict.update(kwargs)
-    return unicode(fmt).format(*args, **objdict)
+    return fmt.format(*args, **objdict)
 
 
 
@@ -326,7 +323,7 @@ class Entity(object):
         if self.name:
             return "{}{}{}".format(self.id, sep, self.name)
         else:
-            return unicode(self.id)
+            return str(self.id)
 
 
     def pretty(self, short=False):
@@ -341,7 +338,7 @@ class Entity(object):
 
 
     def wiki(self):
-        return self.name or unicode(self.id)
+        return self.name or str(self.id)
 
 
     def wikirow(self):
@@ -444,16 +441,16 @@ class Entity(object):
 
     def __repr__(self):
         if self.name:
-            return b"<{} {:d}: {}>".format(self.__class__.__name__,
+            return "<{} {:d}: {}>".format(self.__class__.__name__,
                                            self.id,
                                            repr(self.name))
         else:
-            return b"<{} {:d}>".format(self.__class__.__name__,
+            return "<{} {:d}>".format(self.__class__.__name__,
                                        self.id)
 
 
     def __unicode__(self):
-        return self.name if self.name else unicode(repr(self))
+        return self.name if self.name else repr(self)
 
 
     def __str__(self):
@@ -641,8 +638,7 @@ class Quality(Entity):
             elif e.etype == "Shop":
                 out = "{} {}{}".format(
                         e.etype.upper(), e,
-                        " [{}]".format(", ".join(unicode(_)
-                                                 for _ in e.locations))
+                        " [{}]".format(", ".join(str(_) for _ in e.locations))
                             if e.locations else "",
                 )
             else:
@@ -671,6 +667,26 @@ class Quality(Entity):
             #_print("")
 
         return "\n".join(output).strip()
+
+
+    def trade(self):
+        pass
+#        output = []
+#        items = []
+#         for shop in self.ss.shops:
+#             items = [_ for _ in shop.items if self in (_.item, _.currency)]
+#             if items:
+#
+#             for item in shop.items:
+#                 if self in (item.item, item.currency):
+#                     items.append(item)
+#                     results.setdefault(s, []).append(i)
+#                     out = "{} {}{}".format(
+#                             e.etype.upper(), e,
+#                             " [{}]".format(", ".join(unicode(_)
+#                                                      for _ in e.locations))
+#                                 if e.locations else "",
+#                     )
 
 
 
@@ -715,12 +731,12 @@ class ShopItem(Entity):
 
     def __repr__(self):
         try:
-            return (b"<{0.__class__.__name__} {0.id}:"
+            return ("<{0.__class__.__name__} {0.id}:"
                      " {0.item!r} ({0.buy}, {0.sell})"
                      " x {0.currency!r}>".format(self))
         except AttributeError:
             # repr() requested by base class before __init__() finishes
-            return b"<{0.__class__.__name__} {0.id}>".format(self)
+            return "<{0.__class__.__name__} {0.id}>".format(self)
 
 
     def __unicode__(self):
@@ -744,8 +760,7 @@ class Shop(Entity):
     def pretty(self):
         pretty = super(Shop, self).pretty()
         locations = (
-            "\n\tLocation: {}".format(", ".join(unicode(_) for _ in
-                                                self.locations))
+            "\n\tLocation: {}".format(", ".join(str(_) for _ in self.locations))
         ) if self.locations else ""
         items = "\n\t\t".join(_.pretty() for _ in self.items)
         return "{}{}\n\tItems: {}\n\t\t{}".format(pretty, locations, len(self.items), items)
@@ -917,7 +932,7 @@ class QualityOperator(Entity):
 
     def __repr__(self):
         try:
-            return b"<{cls} {id}: {qid} - {qname} {ops}>".format(
+            return "<{cls} {id}: {qid} - {qname} {ops}>".format(
                 cls   = self.__class__.__name__,
                 id    = self.id,
                 qid   = self.quality.id,
@@ -925,7 +940,7 @@ class QualityOperator(Entity):
                 ops   = repr(self.operator))
         except AttributeError:
             # repr() requested by base class before __init__() finishes
-            return b"<{cls} {id}>".format(
+            return "<{cls} {id}>".format(
                 cls   = self.__class__.__name__,
                 id    = self.id)
 
@@ -1523,8 +1538,7 @@ class Entities(object):
         return self.__class__(path=self.path,
                               ss=self.ss,
                               entities=(_ for _ in self
-                                        if re.search(name, _.name,
-                                                     re.IGNORECASE)))
+                                        if re.search(name, _.name, re.IGNORECASE)))
 
 
     def wikitable(self):
@@ -1724,13 +1738,13 @@ class SaveQuality(object):
 
     def __repr__(self):
         if self.quality.name:
-            return b"<{cls} {qid}: {qname!r} = {value!r}>".format(
+            return "<{cls} {qid}: {qname!r} = {value!r}>".format(
                 cls   = self.__class__.__name__,
                 qid   = self.quality.id,
                 qname = self.quality.name,
                 value = self.value)
         else:
-            return b"<{cls} {qid} = {value!r}>".format(
+            return "<{cls} {qid} = {value!r}>".format(
                 cls   = self.__class__.__name__,
                 qid   = self.quality.id,
                 qname = self.quality.name,
