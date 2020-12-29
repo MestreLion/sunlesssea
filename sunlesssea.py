@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
 #    Copyright (C) 2016 Rodrigo Silva (MestreLion) <linux@rodrigosilva.com>
@@ -146,7 +146,7 @@ def parse_args(argv=None):
                         dest='check',
                         action="store_true",
                         default=False,
-                        help="Perform integrity checks, takes about 20% longer.")
+                        help="Perform integrity checks, takes about 20%% longer.")
 
     parser.add_argument('-d', '--datadir',
                         dest='datadir',
@@ -449,12 +449,8 @@ class Entity(object):
                                        self.id)
 
 
-    def __unicode__(self):
-        return self.name if self.name else repr(self)
-
-
     def __str__(self):
-        return self.__unicode__().encode('utf-8')
+        return self.name if self.name else repr(self)
 
 
 
@@ -739,7 +735,7 @@ class ShopItem(Entity):
             return "<{0.__class__.__name__} {0.id}>".format(self)
 
 
-    def __unicode__(self):
+    def __str__(self):
         return self.pretty()
 
 
@@ -926,7 +922,7 @@ class QualityOperator(Entity):
         )
 
 
-    def __unicode__(self):
+    def __str__(self):
         return self._format()
 
 
@@ -1497,7 +1493,7 @@ class Outcome(BaseEvent):
         return page
 
 
-    def __unicode__(self):
+    def __str__(self):
         return "{} Outcome{}{}".format(
             self.label,
             iif(self.chance, " ({}% chance)".format(self.chance)),
@@ -1593,13 +1589,9 @@ class Entities(object):
         return len(self._entities)
 
 
-    def __unicode__(self):
+    def __str__(self):
         return "<{}: {:d}>".format(self.__class__.__name__,
                                    len(self._entities))
-
-
-    def __str__(self):
-        return self.__unicode__().encode('utf-8')
 
 
 
@@ -1718,7 +1710,7 @@ class SaveQuality(object):
         return self._data
 
 
-    def __unicode__(self):
+    def __str__(self):
         modstr = ""
         if self.modifier:
             modstr = " + {} = {}".format(self.modifier,
@@ -1730,10 +1722,6 @@ class SaveQuality(object):
 
         return ("{self.id}\t{self.quality} = {self.value}"
                 "{modstr}{equipstr}".format(**locals()))
-
-
-    def __str__(self):
-        return self.__unicode__().encode('utf-8')
 
 
     def __repr__(self):
