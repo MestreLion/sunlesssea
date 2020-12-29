@@ -1,0 +1,209 @@
+113543 - A Firkin of Red Honey (redhoney)
+	'Highly profitable, if you have no principles. [This stuff is too dangerous even to be properly illegal. Be cautious(...)'
+
+	EVENT The Brass Embassy [Fallen London]
+		ACTION Sell a shipment of red honey to the Brass Embassy
+			REQUIREMENT A Firkin of Red Honey ≥ 1
+			Default outcome:
+				A Firkin of Red Honey += -1
+				Echo += 999
+
+	EVENT London! [Fallen London]
+		ACTION Honey at the crossroads
+			REQUIREMENT A Firkin of Red Honey ≥ 1
+			Default outcome:
+				A Firkin of Red Honey += -1
+				Captivating Treasure += 1
+				Terror += (2)
+			Rare default outcome (50% chance):
+				A Firkin of Red Honey += -1
+				Echo += 900
+
+	EVENT An Inspection by the Ministry of Public Decency [Fallen London]
+		ACTION Nothing to hide
+			REQUIREMENT A Firkin of Red Honey ≤ 0
+
+		ACTION Hide your cargo
+			REQUIREMENT A Firkin of Red Honey ≥ 1
+			Failed outcome:
+				Echo += -500
+				Menaces: Suspicion += (1)
+				Favours: Admiralty's Favour += -1
+				A Firkin of Red Honey += -1
+				Trigger event: 154183 - Returning to London
+
+	EVENT The Tomb-Colony of Venderbight [Tomb-Colonies]
+		ACTION Sell a shipment of red honey to the Tomb-Colonists
+			REQUIREMENT A Firkin of Red Honey ≥ 1
+			Default outcome:
+				A Firkin of Red Honey += -1
+				Echo += 700
+
+	EVENT Shadowy work in Khan's Heart [Limbo]
+		ACTION Someone has a habit
+			REQUIREMENT A Firkin of Red Honey ≥ 1
+			Default outcome:
+				Networks - An Opportunity: Khan's Heart = 0
+				Networks: Khan's Heart += 3
+				A Firkin of Red Honey += -1
+			Rare default outcome (50% chance):
+				Networks - An Opportunity: Khan's Heart = 0
+				Networks: Khan's Heart += 3
+				A Firkin of Red Honey += -1
+				Vital Intelligence += 1
+
+	EVENT A Civilised Exchange of Gifts [Empire of Hands]
+		ACTION A gift of red honey
+			REQUIREMENT A Firkin of Red Honey ≥ 1
+			Default outcome:
+				A Pot of Violant Ink += 1
+				A Firkin of Red Honey += -1
+				Empire of Hands: Wildweald Status += 5
+				Trigger event: 178092 - A Civilised Exchange of Gifts
+
+	EVENT Port Cavendish [Isle of Cats]
+		ACTION Buy a shipment of red honey
+			Default outcome:
+				Something Awaits You = 0
+				Echo += -600
+				A Firkin of Red Honey += 1
+				Menaces: Suspicion += (1)
+
+		ACTION A delivery for Mr Sacks
+			Default outcome:
+				Sacks and Snow: In the Service of Mr Sacks = 49
+				A Firkin of Red Honey += 1
+
+	SHOP The Friendly Face [Corsair's Forest West]
+		SHOPITEM A Firkin of Red Honey: 0 x Echo, sell for 625
+
+
+
+114963 - A Frozen Drop of Red Honey (redhoney)
+	'Suspended in what feels like a chip of zee-salt. The Exquisite Seneschal of the Empire of Hands claims it will be u(...)'
+
+	EVENT The Vault of the First Emperor [Empire of Hands]
+		ACTION Attempt to read the inscriptions
+			REQUIREMENT A Frozen Drop of Red Honey ≤ 0
+
+		ACTION Attempt to read the inscriptions
+			REQUIREMENT A Frozen Drop of Red Honey = 1
+			Default outcome:
+				A Frozen Drop of Red Honey = 2
+				Trigger event: 175835 - The Vault of the First Emperor
+
+		ACTION Read the inscriptions
+			REQUIREMENT A Frozen Drop of Red Honey ≥ 2
+
+	EVENT Legacy of the First Emperor [Empire of Hands]
+		ACTION A fading taste of red honey
+			REQUIREMENT A Frozen Drop of Red Honey ≥ 1
+			Failed outcome:
+				Empire of Hands: Delightful Archeology = 50
+				A Frozen Drop of Red Honey = 0
+				Trigger event: 176669 - Legacy of the First Emperor
+
+	EVENT The Silent Gallery [Empire of Hands]
+		ACTION Ask for help translating the Vault inscriptions
+			REQUIREMENT A Frozen Drop of Red Honey ≤ 0
+			Default outcome:
+				A Frozen Drop of Red Honey = 1
+				Trigger event: 176492 - The Silent Gallery
+
+
+
+113385 - Isle of Cats: Smuggling Red Honey (redhoney)
+	'You are engaged in an activity too monstrous even to be truly illegal.'
+
+
+
+
+
+113386 - Vials of Red Honey (redhoney)
+	'Ten marked vials packed in a carefully padded casket. [This stuff is too dangerous even to be properly illegal. Be (...)'
+
+	Journal Descriptions: 1
+		[1] - Smuggling a proscribed cargo of red honey
+
+	EVENT The Venturer's Executor [Fallen London]
+		ACTION Betray Zaira
+			REQUIREMENT Vials of Red Honey ≥ 1
+			Default outcome:
+				Vials of Red Honey += -1
+				Echo += 1000
+
+		ACTION A shipment from the Lady of the Cages
+			REQUIREMENT Vials of Red Honey ≥ 1
+			Default outcome:
+				Isle of Cats: Lady of the Cages' Patronage = 3
+				Vials of Red Honey += -1
+				Venturer's Medallion = 1
+
+	EVENT The Venturer's Desires [Fallen London]
+		ACTION A shipment from the Lady of the Cages
+			REQUIREMENT Vials of Red Honey ≥ 1
+			Default outcome:
+				Isle of Cats: Lady of the Cages' Patronage = 3
+				Vials of Red Honey += -1
+				Venturer's Medallion = 1
+
+		ACTION Betray Zaira
+			REQUIREMENT Vials of Red Honey ≥ 1
+			Default outcome:
+				Vials of Red Honey += -1
+				Echo += 1000
+
+	EVENT The Dark-Spectacled Admiral [Fallen London]
+		ACTION Turn in your shipment of red honey
+			REQUIREMENT Vials of Red Honey ≥ 1
+			Default outcome:
+				Vials of Red Honey += -1
+				Favours: Admiralty's Favour += 1
+				Echo += 200
+				Trigger event: 120801 - The Dark-Spectacled Admiral
+
+	EVENT The Alarming Scholar [Fallen London]
+		ACTION A delivery from Isery
+			REQUIREMENT Vials of Red Honey ≥ 1
+			Default outcome:
+				Isle of Cats: Isery's Patronage = 3
+				Vials of Red Honey += -1
+				The Scholar's Notes = 1
+
+		ACTION An opportunity offered
+			REQUIREMENT Vials of Red Honey ≥ 1
+			Default outcome:
+				Vials of Red Honey += -1
+				Echo += 1000
+
+	EVENT An Inspection by the Ministry of Public Decency [Fallen London]
+		ACTION Nothing to hide
+			REQUIREMENT Vials of Red Honey ≤ 0
+
+		ACTION Hide your cargo
+			REQUIREMENT Vials of Red Honey ≥ 1
+			Failed outcome:
+				Vials of Red Honey += -1
+				Echo += -500
+				Menaces: Suspicion += (1)
+				Favours: Admiralty's Favour += -1
+				Trigger event: 154183 - Returning to London
+
+	EVENT Visit Isery's Office [Isle of Cats]
+		ACTION Accept a new commission
+			Default outcome:
+				Vials of Red Honey += 1
+				Isle of Cats: Isery's Patronage = 2
+				Something Awaits You = 0
+				Favours: Antiquarian += 1, only if ≤ 0
+
+	EVENT Isery's disappointment [Isle of Cats]
+		REQUIREMENT Vials of Red Honey = 0
+	EVENT A Request from Zaira [Isle of Cats]
+		ACTION Accept
+			Default outcome:
+				Vials of Red Honey += 1
+				Isle of Cats: Lady of the Cages' Patronage = 2
+
+	EVENT Proper Nomenclature [Isle of Cats]
+		REQUIREMENT Vials of Red Honey = 0
