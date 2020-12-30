@@ -754,7 +754,7 @@ class ShopItem(Entity):
 class Shop(Entity):
     _REQUIRED_FIELDS = Entity._REQUIRED_FIELDS | set(('Availabilities',))
     _IGNORED_FIELDS  = {
-        'Ordering',  # a single occurrence
+        'Ordering',
         'QualitiesRequired',
     }
 
@@ -765,6 +765,14 @@ class Shop(Entity):
         self.items = [ShopItem(data=_d, idx=_i, ss=self.ss, shop=self)
                       for _i, _d in
                       enumerate(self._data['Availabilities'], 1)]
+
+        # Integrity checks
+        if not TEST_INTEGRITY:
+            return
+
+        if self._data.get('QualitiesRequired'):
+            log.warn("%r have non-empty 'QualitiesRequired' list: %s", self,
+                     self._data['QualitiesRequired'])
 
 
     def pretty(self):
@@ -1472,6 +1480,13 @@ class Outcome(BaseEvent):
         self.trigger = self._data.get('LinkToEvent', {}).get('Id', None)
         self.effects = list(self._create_qualops('effects'))
 
+        # Integrity checks
+        if not TEST_INTEGRITY:
+            return
+
+        if self._data.get('ChildBranches'):
+            log.warn("%r have non-null 'ChildBranches': %s", self,
+                     self._data['ChildBranches'])
 
     def pretty(self, short=False):
         out = ["{} outcome{}:".format(self.label,
