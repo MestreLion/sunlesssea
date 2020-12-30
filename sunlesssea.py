@@ -367,8 +367,8 @@ class Entity(object):
         '''Quotes and limits a description, and replace control characters'''
         if len(text) > cut:
             text = text[:cut-len(elipsis)] + "(...)"
-        # repr() quotes and fixes \n, \r, but must get rid of 'u' prefix
-        return repr(text)[1:]
+        # repr() quotes and fixes \n, \r
+        return repr(text)
 
 
     def _parse_adv(self, text, qfmt="[{name}]", dfmt="[1 to {}]",
@@ -562,7 +562,7 @@ class Quality(Entity):
             statuses = getattr(self, attr)
             if statuses:
                 pretty += "\n\n\t{}: {:d}".format(caption, len(statuses))
-                for status in sorted(statuses.iteritems()):
+                for status in sorted(statuses.items()):
                     pretty += "\n\t\t[{}] - {}".format(*status)
 
         return pretty
@@ -643,7 +643,7 @@ class Quality(Entity):
             output.append(indent(out, i))
 
 
-        for e, r in sorted(results.iteritems()):
+        for e, r in sorted(results.items()):
             _print(e)
 
             if e.etype == "Shop":
@@ -1884,7 +1884,7 @@ class SunlessSea(object):
 
         # Requires check AND debug flags... can't possibly hide this better :)
         if TEST_INTEGRITY:
-            for sid, setting in settings.iteritems():
+            for sid, setting in settings.items():
                 log.debug("Locations in setting %s: %s", sid,
                           ", ".join("{0.id} - {0!s}".format(_)
                                     for _ in setting['locations']))
