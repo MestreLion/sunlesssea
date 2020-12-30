@@ -474,12 +474,13 @@ class Quality(Entity):
         "Persistent",
         "Tag",
         'Visible',
+
+        'AssignToSlot',
+        'Enhancements',
     ))
     _IGNORED_FIELDS  = set((
         'AllowedOn',
-        'AssignToSlot',
         'CssClasses',
-        'Enhancements',
         'Notes',
         "Ordering",
         'OwnerName',
@@ -516,7 +517,10 @@ class Quality(Entity):
         for attr, key, _ in self._status_fields:
             setattr(self, attr, self._parse_status(self._data.get(key, "")))
 
+        # Both assign and enhancements referece other qualities that might not
+        # have been loaded yet. Post-processing is performed by SunlessSea()
         self.assign = self._data.get('AssignToSlot', {}).get('Id', None)
+        self.enhancements = self._data.get('Enhancements', [])
 
         if TEST_INTEGRITY:
             if self.assign and self.category not in (
@@ -554,6 +558,11 @@ class Quality(Entity):
 
         if self.assign:
             pretty += "\n\tAssignable to {} slot".format(self.assign)
+
+        if self.enhancements:
+            pretty += "\n\tEnhancements: {:d}\n\t\t{}".format(
+                len(self.enhancements),
+                "\n\t\t".join(_.pretty().strip() for _ in self.enhancements))
 
         if self.isslot:
             pretty += "\n\tIs a slot"
@@ -1797,8 +1806,13 @@ class SunlessSea(object):
         self.shops = Shops(entities=(_ for _ in self._create_shop()), ss=self)
         self.ports = None  # soon!
 
-        # Add 'AssignToSlot' references
+        # Add references to other Qualities in 'Enhancements' and 'AssignToSlot'
         for quality in self.qualities:
+            quality.enhancements = [
+                Effect(data=_d, idx=_i, ss=self, parent=quality)
+                for _i, _d in enumerate(quality.enhancements, 1)
+            ]
+
             slot = quality.assign
             if slot is None:
                 continue
