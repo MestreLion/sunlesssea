@@ -258,7 +258,7 @@ def main(argv=None):
 class Entity(object):
     '''Base class for an Entity
         Subclasses MAY override or extend _REQUIRED_FIELDS, and MAY override
-        _OPTIONAL_FIELDS _and IGNORED_FIELDS
+        _OPTIONAL_FIELDS and _IGNORED_FIELDS
     '''
 
     _ENTITY_FIELDS    = set(("Id", "Name", "Description", "Image"))
@@ -492,14 +492,16 @@ class Quality(Entity):
     ))
 
     _status_fields = (
-        ('level_status',  'LevelDescriptionText', 'Journal Descriptions'),
+        # Attribute name   JSON key                 Caption for .pretty()
+        ('level_status',  'LevelDescriptionText',  'Journal Descriptions'),
         ('change_status', 'ChangeDescriptionText', 'Change Descriptions'),
-        ('image_status',  'LevelImageText', 'Images'),
+        ('image_status',  'LevelImageText',        'Images'),
     )
 
 
     def __init__(self, data, idx=0, ss=None):
         super(Quality, self).__init__(data=data, idx=idx, ss=ss)
+        # For atomic (non-mutable) values only!
         for attr, atype, default in (
             ("AvailableAt",        str,  ""),
             ("Cap",                int,  0),
@@ -837,7 +839,7 @@ class QualityOperator(Entity):
 
 
     def _format(self,
-            # Defaults are suitable for __unicode__() and pretty()
+            # Defaults are suitable for __str__() and pretty()
             qfmt="{name}{sep}{ops}{ifsep}{ifs}",
             qfmtqty="{name} += {qtyops}{ifsep}{ifs}",
             qfmtrev="{name} += ({qtyops}){ifsep}{ifs}",
@@ -1098,7 +1100,7 @@ class Requirement(QualityOperator):
 
 class BaseEvent(Entity):
     '''
-    Base class for Event, Action and Effect, as they have a very similar format
+    Base class for Event, Action and Outcome, as they have a very similar format
         Subclasses SHOULD override or extend _OPTIONAL_FIELDS
     '''
 
