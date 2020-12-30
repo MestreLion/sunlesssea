@@ -753,7 +753,10 @@ class ShopItem(Entity):
 
 class Shop(Entity):
     _REQUIRED_FIELDS = Entity._REQUIRED_FIELDS | set(('Availabilities',))
-    _IGNORED_FIELDS  = {'Ordering'}  # a single occurrence
+    _IGNORED_FIELDS  = {
+        'Ordering',  # a single occurrence
+        'QualitiesRequired',
+    }
 
 
     def __init__(self, data, idx=0, ss=None, locations=None):
@@ -1449,6 +1452,7 @@ class Outcome(BaseEvent):
         "LinkToEvent",
     ))
     _IGNORED_FIELDS  = set((
+        'ChildBranches',
         'Category',
         'ExoticEffects',
         'MoveToArea',
