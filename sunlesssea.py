@@ -1423,13 +1423,13 @@ class Action(BaseEvent):
             "{rowspan}| {name}\n"
             "{rowspan}|\n"
             "<ul>\n"
-            "{reqs}<p></p>\n"
+            "{reqs}<br>\n"
             "</ul>\n"
             "{firstrow}"  # firstrow always contains leading '|' and trailing '\n'
             "{rowspan}|{note}\n"
         ).format(
             name=self._parse_adv(self.name, qnamefmt="[q:[[{}]]]"),
-            reqs="<p></p>\n".join(_.wiki() for _ in self.requirements) or "-",
+            reqs="<br>\n".join(_.wiki() for _ in self.requirements) or "-",
             note=iif(note, " {{{{game note|{}}}}}".format(note)),
             rowspan=rowspan,
             firstrow=firstrow,
@@ -1512,10 +1512,10 @@ class Outcome(BaseEvent):
         page += "<ul>\n"
 
         for effect in self.effects:
-            page += "{}<p></p>\n".format(effect.wiki())
+            page += "<li>{}\n".format(effect.wiki())
 
         if self.trigger and self.trigger is not self.parent.parent:
-            page += "{{{{trigger event|{}}}}}<p></p>\n".format(self.trigger.name)
+            page += "<li>{{{{trigger event|{}}}}}\n".format(self.trigger.name)
 
         elif not self.effects:
             page += "-<p></p>\n"
