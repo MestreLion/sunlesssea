@@ -472,6 +472,7 @@ class Quality(Entity):
         "IsSlot",
         "Nature",
         "Persistent",
+        "PluralName",
         "Tag",
         'Visible',
 
@@ -511,6 +512,7 @@ class Quality(Entity):
             ("IsSlot",             bool, False),
             ("Nature",             int,  0),
             ("Persistent",         bool, False),
+            ("PluralName",         str,  ""),
             ("Tag",                str,  ""),
             ("Visible",            bool, False),
         ):
