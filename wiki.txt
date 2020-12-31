@@ -1,0 +1,16 @@
+How to create image redirects for {{link_icon}} at the Official Sunless Sea wiki:
+- Better to do this *before* editing/creating pages that point to the images. Use Preview
+- Find the target image name, such as:
+	File:SS torpedosmall.png
+- Use the full/canonical entity name as source, such as 'Torpedo Components'
+	Remove ':', but leave spaces, dots, commas, apostrophes, etc, as is
+- Paste the edit URL directly to browser address, for example:
+	https://sunlesssea.gamepedia.com/File:SS Torpedo Components.png?action=edit
+- Add the redirect content pointing to target:
+	#REDIRECT [[File:SS torpedosmall.png]]
+
+Copy & Paste helpers:
+
+https://sunlesssea.gamepedia.com/File:SS .png?action=edit
+#REDIRECT [[File:SS small.png]]
+#REDIRECT [[File:SS gaz.png]]
