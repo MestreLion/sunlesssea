@@ -97,7 +97,7 @@ def main(argv=None):
         log.error("Quality not found in Autosave: %s", args.quality)
         return ERR
 
-    if not args.value:
+    if args.value is None:
         for q in qualities:
             print(q)
         return
