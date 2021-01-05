@@ -155,7 +155,7 @@ def parse_args(argv=None):
 
     parser.add_argument('-f', '--format',
                         dest='format',
-                        choices=('bare', 'dump', 'pretty', 'wiki', 'wikipage'),
+                        choices=('bare', 'dump', 'json', 'pretty', 'wiki', 'wikipage'),
                         default='pretty',
                         help="Output format. 'wiki' is awesome!"
                             " Available formats: [%(choices)s]."
@@ -226,6 +226,8 @@ def main(argv=None):
             safeprint(entities.pretty())
         elif args.format == 'dump':
             safeprint(entities.dump())
+        elif args.format == 'json':
+            safeprint(entities.to_json())
         else:
             safeprint(entities.bare())
         return
@@ -318,6 +320,8 @@ class Entity(object):
     def dump(self):
         return self._data
 
+    def to_json(self):
+        return json.dumps(self._data, indent=4, separators=(',',':'))
 
     def bare(self, sep='\t'):
         if self.name:
@@ -1588,6 +1592,10 @@ class Entities(object):
 
     def dump(self):
         return [_.dump() for _ in self]
+
+
+    def to_json(self):
+        return "[\n{}\n]".format(','.join(_.to_json() for _ in self))
 
 
     def pretty(self):
