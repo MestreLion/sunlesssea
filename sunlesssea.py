@@ -1021,7 +1021,7 @@ class Requirement(QualityOperator):
 
 
     def _format(self,
-            # Defaults are suitable for __unicode__()
+            # Defaults are suitable for __str__()
             fmt="{quality}{sep}{ops}",
             fmtcha="{quality} challenge ({} for 100%){opsep}{ops}",
             fmtchaluck="{quality} challenge ({}%){opsep}{ops}",
@@ -1086,7 +1086,7 @@ class Requirement(QualityOperator):
 
             elif op == 'DifficultyLevel':
                 if self.quality.category == 2000:  # "Luck", ID=432
-                    fmt   = fmtchaluck
+                    fmt = fmtchaluck
                     value = 50 - value * self.quality.difficultyscaler
                 else:
                     fmt = fmtcha
@@ -1094,10 +1094,13 @@ class Requirement(QualityOperator):
                                           self.quality.difficultyscaler))
                             if value and self.quality.difficultyscaler
                             else value)
+                add(fmt, value, quality=self.quality, opsep="", ops="")
+                fmt = "{ops}"
 
             elif op == 'DifficultyAdvanced':
-                fmt   = fmtchaadv
-                value = self._parse_adv(value, advfmtq, advfmtd)
+                add(fmtchaadv, self._parse_adv(value, advfmtq, advfmtd),
+                    quality=self.quality, opsep="", ops="")
+                fmt = "{ops}"
 
             elif op == 'MaxLevel':         add(maxfmt, value)
             elif op == 'MaxLevelAdvanced': add(maxfmt, value, True)
@@ -1595,7 +1598,7 @@ class Entities(object):
 
 
     def to_json(self):
-        return "[\n{}\n]".format(','.join(_.to_json() for _ in self))
+        return "[\n{}\n]".format(',\n'.join(_.to_json() for _ in self))
 
 
     def pretty(self):
