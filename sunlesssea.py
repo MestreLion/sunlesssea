@@ -170,14 +170,11 @@ def parse_args(argv=None):
                             " Available formats: [%(choices)s]."
                             " [Default: %(default)s]")
 
-    parser.add_argument('-m', '--method',
-                        dest='method',
-                        choices=('usage',),
-                        #default='test',
-                        metavar="METHOD",
-                        help="Method (operation) to execute. Not all entities have all methods"
-                            " Available methods: [%(choices)s]."
-                            " [Default: %(default)s]")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('-U', '--usage', const="usage",
+                       dest='method',
+                       action="store_const",
+                       help="Show quality usage")
 
     parser.add_argument(dest='entity',
                         choices=sorted(set(ENTITIES) | set(_[0] for _ in ENTITIES)),
@@ -452,6 +449,9 @@ class Entity(object):
 
         return result
 
+
+    def __lt__(self, other):
+        return self.id < other.id
 
     def __repr__(self):
         if self.name:
