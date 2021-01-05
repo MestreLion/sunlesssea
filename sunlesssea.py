@@ -54,6 +54,15 @@ log = logging.getLogger(os.path.basename(os.path.splitext(__file__)[0]))
 # Changed by main() on command-line args
 TEST_INTEGRITY = False
 
+ENTITIES = {
+    'autosave':  'autosave',
+    'event':     'events',
+    'location':  'locations',
+    'quality':   'qualities',
+    'shop':      'shops',
+    'demo':      None,
+}
+
 
 
 
@@ -170,14 +179,12 @@ def parse_args(argv=None):
                             " Available methods: [%(choices)s]."
                             " [Default: %(default)s]")
 
-    parser.add_argument('-e', '--entity',
-                        dest='entity',
-                        choices=('locations', 'qualities', 'events', 'shops', 'autosave'),
-                        default='test',
+    parser.add_argument(dest='entity',
+                        choices=sorted(set(ENTITIES) | set(_[0] for _ in ENTITIES)),
                         metavar="ENTITY",
                         help="Entity to work on."
-                            " Available entities: [%(choices)s]."
-                            " [Default: %(default)s]")
+                            " Available entities: {}."
+                            " [Default: %(default)s]".format(list(ENTITIES)))
 
     parser.add_argument(dest='filter',
                         nargs='?',
@@ -186,6 +193,9 @@ def parse_args(argv=None):
 
     args = parser.parse_args(argv)
     args.debug = args.loglevel == logging.DEBUG
+    if len(args.entity) == 1:
+        args.entity = [_ for _ in ENTITIES if _[0] == args.entity][0]
+    args.entity = ENTITIES.get(args.entity) or args.entity
 
     return args
 
@@ -206,37 +216,7 @@ def main(argv=None):
     log.debug(ss.events)
     log.debug(ss.shops)
 
-    if args.entity in ('locations', 'qualities', 'events', 'shops'):
-        entities = getattr(ss, args.entity).find(args.filter)
-        if not entities:
-            log.error("No %s found for %r", args.entity, args.filter)
-            return
-        if args.method == 'usage':
-            if not args.entity == 'qualities':
-                log.error("Method 'usage' only available for qualities")
-                return
-            safeprint(entities.usage(args.format))
-            return
-
-        if args.format == 'wiki':
-            safeprint(entities.wikitable())
-        elif args.format == 'wikipage':
-            safeprint(entities.wikipage())
-        elif args.format == 'pretty':
-            safeprint(entities.pretty())
-        elif args.format == 'dump':
-            safeprint(entities.dump())
-        elif args.format == 'json':
-            safeprint(entities.to_json())
-        else:
-            safeprint(entities.bare())
-        return
-
-    elif args.entity == "autosave":
-        for _ in ss.autosave.qualities.find(args.filter):
-            safeprint(_)
-
-    elif args.entity == "demo":
+    if args.entity == "demo":
         for event in ss.events.at(name="Pigmote Isle"):  # ID = 102804
             safeprint(event.pretty())
             safeprint()
@@ -251,6 +231,36 @@ def main(argv=None):
             safeprint(repr(event))
         return
 
+    if args.entity == "autosave":
+        for _ in ss.autosave.qualities.find(args.filter):
+            safeprint(_)
+        return
+
+    # General entities
+    entities = getattr(ss, args.entity).find(args.filter)
+    if not entities:
+        log.error("No %s found for %r", args.entity, args.filter)
+        return
+    if args.method == 'usage':
+        if not args.entity == 'qualities':
+            log.error("Method 'usage' only available for qualities")
+            return
+        safeprint(entities.usage(args.format))
+        return
+
+    if args.format == 'wiki':
+        safeprint(entities.wikitable())
+    elif args.format == 'wikipage':
+        safeprint(entities.wikipage())
+    elif args.format == 'pretty':
+        safeprint(entities.pretty())
+    elif args.format == 'dump':
+        safeprint(entities.dump())
+    elif args.format == 'json':
+        safeprint(entities.to_json())
+    else:
+        safeprint(entities.bare())
+    return
 
 
 
