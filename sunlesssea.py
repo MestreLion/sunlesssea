@@ -1574,16 +1574,14 @@ class Entities(object):
         self.path = path
         self.ss = ss
 
-        if entities is None:
+        if data is not None:
             for idx, edata in enumerate(data, 1):
                 entity = self.EntityCls(data=edata, idx=idx, ss=self.ss,
                                         *eargs, **ekwargs)
-                self._entities[entity.id] = entity
-                self._order.append(entity)
-        else:
+                self.add(entity, check=False)
+        if entities is not None:
             for entity in entities:
-                self._entities[entity.id] = entity
-                self._order.append(entity)
+                self.add(entity, check=TEST_INTEGRITY)
 
 
     def find(self, name):
@@ -1645,6 +1643,20 @@ class Entities(object):
     def get(self, eid, default=None):
         '''Get entity by ID'''
         return self._entities.get(eid, default)
+
+
+    def add(self, entity, check=True):
+        '''Add an Entity to the container.
+            Use with caution, as Entities should remain as immutable as possible
+        '''
+        if check and not isinstance(entity, self.EntityCls):
+            raise ValueError("Must be instance of {} to add to {}, type {} found: {}"
+                             .format(self.EntityCls.__name__,
+                                     self.__class__.__name__,
+                                     type(entity),
+                                     repr(entity)))
+        self._entities[entity.id] = entity
+        self._order.append(entity)
 
 
     def __getitem__(self, val):
