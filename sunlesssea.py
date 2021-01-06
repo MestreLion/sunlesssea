@@ -1518,6 +1518,8 @@ class Outcome(BaseEvent):
         self.trigger = self._data.get('LinkToEvent', {}).get('Id', None)
         self.effects = list(self._create_qualops('effects'))
 
+        self.exoticeffects = self._data.get('ExoticEffects', "")
+
         self.movetoarea = None
         if 'MoveToArea' in self._data:
             eid = self._data['MoveToArea']['Id']
@@ -1561,6 +1563,9 @@ class Outcome(BaseEvent):
             out.append("\tMove to: {} - {}".format(self.movetoarea.id,
                                                   self.movetoarea.name))
 
+        if self.exoticeffects:
+            out.append("\t{}".format(self.exoticeffects))
+
         return "\n".join(filter(None, out)) + '\n'
 
 
@@ -1577,6 +1582,9 @@ class Outcome(BaseEvent):
 
         if self.movetoarea:
             pg += "<li>Goes to {{{{link icon|{}}}}}\n".format(self.movetoarea)
+
+        if self.exoticeffects:
+            pg += "<li>{{{{action|{}}}}}\n".format(self.exoticeffects)
 
         page += pg if pg else "-<br>\n"
         page += "</ul>"
