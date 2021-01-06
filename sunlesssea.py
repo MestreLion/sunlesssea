@@ -327,8 +327,10 @@ class Entity(object):
     def dump(self):
         return self._data
 
+
     def to_json(self):
         return json.dumps(self._data, indent=4, separators=(',',':'))
+
 
     def bare(self, sep='\t'):
         if self.name:
@@ -453,6 +455,7 @@ class Entity(object):
     def __lt__(self, other):
         return self.id < other.id
 
+
     def __repr__(self):
         if self.name:
             return "<{} {:d}: {}>".format(self.__class__.__name__,
@@ -516,7 +519,7 @@ class Quality(Entity):
 
     def __init__(self, data, idx=0, ss=None):
         super(Quality, self).__init__(data=data, idx=idx, ss=ss)
-        # For atomic (non-mutable) values only!
+        # For scalar (atomic, non-mutable) values only!
         for attr, atype, default in (
             ("AvailableAt",        str,  ""),
             ("Cap",                int,  0),
@@ -1343,12 +1346,12 @@ class Event(BaseEvent):
 class Action(BaseEvent):
     # Order is VERY important, hence tuple
     _OUTCOME_TYPES = ('DefaultEvent',
-                     'RareDefaultEvent',
-                     'SuccessEvent',
-                     'RareSuccessEvent')
+                      'RareDefaultEvent',
+                      'SuccessEvent',
+                      'RareSuccessEvent')
 
     _REQUIRED_FIELDS = set((
-        "QualitiesRequired",
+        'QualitiesRequired',
         'ParentEvent',
         'DefaultEvent',
     ))
@@ -1360,7 +1363,7 @@ class Action(BaseEvent):
     _IGNORED_FIELDS = set((
         'ActionCost',
         'ButtonText',
-        "Ordering",
+        'Ordering',
     ))
 
     _outcome_label_replaces = (("Event", ""),
@@ -1475,17 +1478,17 @@ class Action(BaseEvent):
 class Outcome(BaseEvent):
     _REQUIRED_FIELDS = set()
     _OPTIONAL_FIELDS = BaseEvent._OPTIONAL_FIELDS - {'Image'} | set((
-        "QualitiesAffected",
-        "LinkToEvent",
+        'QualitiesAffected',
+        'LinkToEvent',
     ))
     _IGNORED_FIELDS  = set((
         'ChildBranches',
         'Category',
         'ExoticEffects',
         'MoveToArea',
-        "Urgency",
-        "SwitchToSetting",
-        "SwitchToSettingId",
+        'Urgency',
+        'SwitchToSetting',
+        'SwitchToSettingId',
     ))
 
 
