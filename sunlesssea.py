@@ -185,8 +185,8 @@ def parse_args(argv=None):
 
     parser.add_argument(dest='filter',
                         nargs='?',
-                        metavar="NAME_OR_ID",
-                        help="Match ENTITY by its numerical ID or name"
+                        metavar="FILTER",
+                        help="Match entities by numerical ID or name"
                             " (partial, case-insentitive).")
 
     args = parser.parse_args(argv)
@@ -237,7 +237,7 @@ def main(argv=None):
     # General entities
     entities = getattr(ss, args.entity)
     try:
-        entities = entities.find_by_id(int(args.filter))
+        entities = entities.find_by_id(int(args.filter or ""))
     except ValueError:
         entities = entities.find(args.filter)
 
