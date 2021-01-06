@@ -1228,26 +1228,26 @@ class Event(BaseEvent):
     '''"Root" events, such as Port Interactions'''
 
     _REQUIRED_FIELDS = set((
-        "ChildBranches",
+        'ChildBranches',
         'QualitiesRequired',
         'QualitiesAffected',
     ))
     _OPTIONAL_FIELDS = BaseEvent._OPTIONAL_FIELDS | set((
-        "Autofire",
+        'Autofire',
         'Category',
         'LimitedToArea',
     ))
     _IGNORED_FIELDS  = set((
         'CanGoBack',
         'ChallengeLevel',
-        "Deck",
-        "Distribution",
+        'Deck',
+        'Distribution',
         'ExoticEffects',
-        "Ordering",
-        "Setting",
-        "Stickiness",
+        'Ordering',
+        'Setting',
+        'Stickiness',
         'Transient',
-        "Urgency",
+        'Urgency',
     ))
 
 
@@ -1399,6 +1399,14 @@ class Action(BaseEvent):
                  chance    = self._data.get(item + 'Chance', None),
                  label     = self._outcome_label(item)))
 
+        # Integrity checks
+        if not TEST_INTEGRITY:
+            return
+
+        if self._data.get('QualitiesAffected'):
+            log.warn("%r have non-null effects: %s", self,
+                     self._data['QualitiesAffected'])
+
 
     @property
     def gamenote(self):
@@ -1485,11 +1493,10 @@ class Action(BaseEvent):
 
 
 class Outcome(BaseEvent):
-    _REQUIRED_FIELDS = set()
+    _REQUIRED_FIELDS = set(('QualitiesAffected',))
     _OPTIONAL_FIELDS = BaseEvent._OPTIONAL_FIELDS - {'Image'} | set((
         'LinkToEvent',
         'MoveToArea',
-        'QualitiesAffected',
     ))
     _IGNORED_FIELDS  = set((
         'Category',
@@ -1530,6 +1537,11 @@ class Outcome(BaseEvent):
         if self._data.get('ChildBranches'):
             log.warn("%r have non-null 'ChildBranches': %s", self,
                      self._data['ChildBranches'])
+
+        if self._data.get('QualitiesRequired'):
+            log.warn("%r have non-null requirements: %s", self,
+                     self._data['QualitiesRequired'])
+
 
     def pretty(self, short=False):
         out = ["{} outcome{}:".format(self.label,
