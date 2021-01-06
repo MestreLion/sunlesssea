@@ -1487,17 +1487,17 @@ class Action(BaseEvent):
 class Outcome(BaseEvent):
     _REQUIRED_FIELDS = set()
     _OPTIONAL_FIELDS = BaseEvent._OPTIONAL_FIELDS - {'Image'} | set((
-        'QualitiesAffected',
         'LinkToEvent',
+        'MoveToArea',
+        'QualitiesAffected',
     ))
     _IGNORED_FIELDS  = set((
-        'ChildBranches',
         'Category',
+        'ChildBranches',
         'ExoticEffects',
-        'MoveToArea',
-        'Urgency',
         'SwitchToSetting',
         'SwitchToSettingId',
+        'Urgency',
     ))
 
 
@@ -1510,6 +1510,18 @@ class Outcome(BaseEvent):
         self.label   = label
         self.trigger = self._data.get('LinkToEvent', {}).get('Id', None)
         self.effects = list(self._create_qualops('effects'))
+
+        self.movetoarea = None
+        if 'MoveToArea' in self._data:
+            eid = self._data['MoveToArea']['Id']
+            if self.ss and self.ss.locations:
+                self.movetoarea = ss.locations.get(eid)
+
+            if not self.movetoarea:
+                log.warning("Could not find Location referenced in %r: %d", self, eid)
+                self.movetoarea = Location(self._data['MoveToArea'])
+                if self.ss:
+                    self.ss.locations.add(self.movetoarea)
 
         # Integrity checks
         if not TEST_INTEGRITY:
@@ -1533,22 +1545,28 @@ class Outcome(BaseEvent):
             out.append("\tTrigger event: {} - {}".format(self.trigger.id,
                                                          self.trigger.name))
 
+        if self.movetoarea:
+            out.append("\tMove to: {} - {}".format(self.movetoarea.id,
+                                                  self.movetoarea.name))
+
         return "\n".join(filter(None, out)) + '\n'
 
 
     def wiki(self):
         page = iif(self.name, "{{{{effect title|{}}}}}\n".format(self.name), "")
         page += "<ul>\n"
+        pg = ""
 
         for effect in self.effects:
-            page += "<li>{}\n".format(effect.wiki())
+            pg += "<li>{}\n".format(effect.wiki())
 
         if self.trigger and self.trigger is not self.parent.parent:
-            page += "<li>{{{{trigger event|{}}}}}\n".format(self.trigger.name)
+            pg += "<li>{{{{trigger event|{}}}}}\n".format(self.trigger.name)
 
-        elif not self.effects:
-            page += "-<p></p>\n"
+        if self.movetoarea:
+            pg += "<li>Goes to {{{{link icon|{}}}}}\n".format(self.movetoarea)
 
+        page += pg if pg else "-<br>\n"
         page += "</ul>"
 
         return page
