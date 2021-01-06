@@ -39,14 +39,15 @@
 #    - show all Event and Action Requirements, as well as all Outcomes.
 #        (as a side-effect, will dramatically simplify the code)
 
-import sys
-import os
 import argparse
-import logging
-import json
-import re
-import math
+import bisect
 import collections
+import json
+import logging
+import math
+import os
+import re
+import sys
 
 
 log = logging.getLogger(os.path.basename(os.path.splitext(__file__)[0]))
@@ -573,14 +574,30 @@ class Quality(Entity):
     def _parse_status(self, value):
         if not value:
             return {}
-        return {int(k):v for k,v in (row.split("|") for row in value.split("~"))}
+        return {int(k):v for k,v in sorted(row.split("|") for row in value.split("~"))}
+
+
+    def status_for(self, value):
+        def largest_lesser(d, v):
+            if not d:
+                return
+            keys = sorted(d.keys())
+            i = bisect.bisect_left(keys, v)
+            if i:
+                return d[keys[i-1]]
+        return (self.change_status.get(value) or
+                self.level_status.get(value) or
+                largest_lesser(self.change_status, value) or
+                largest_lesser(self.level_status, value) or
+                "").rstrip('.')
 
 
     def pretty(self):
         pretty = super(Quality, self).pretty()
 
         if self.availableat:
-            pretty += "\t{}\n".format(self.availableat)
+            pretty += "{}\t{}\n".format(iif(self.description, "", '\n'),
+                                        self.availableat)
 
         pretty += "\n\tCategory: {}".format(self.category)
         if self.tag:
@@ -1823,6 +1840,10 @@ class SaveQuality(object):
 
 
     @property
+    def status(self):
+        return self.quality.status_for(self.value)
+
+    @property
     def value(self):
         return self._data['Level']
 
@@ -1837,17 +1858,13 @@ class SaveQuality(object):
 
 
     def __str__(self):
-        modstr = ""
-        if self.modifier:
-            modstr = " + {} = {}".format(self.modifier,
-                                         self.value + self.modifier)
-
-        equipstr = ""
-        if self.quality.isslot:
-            equipstr = " [{}]".format(self.equipped or "")
+        statusstr = iif(self.status, " [{}]".format(self.status))
+        modstr = iif(self.modifier, " + {} = {}".format(self.modifier,
+                                                        self.value + self.modifier))
+        equipstr = iif(self.quality.isslot, " [{}]".format(self.equipped or ""))
 
         return ("{self.id}\t{self.quality} = {self.value}"
-                "{modstr}{equipstr}".format(**locals()))
+                "{statusstr}{modstr}{equipstr}".format(**locals()))
 
 
     def __repr__(self):
