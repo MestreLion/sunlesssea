@@ -176,11 +176,6 @@ def parse_args(argv=None):
                        action="store_const",
                        help="Show quality usage")
 
-    parser.add_argument('-i', '--id',
-                        default=False,
-                        action="store_true",
-                        help="Match FILTER by entity ID instead of by name.")
-
     parser.add_argument(dest='entity',
                         choices=sorted(set(ENTITIES) | set(_[0] for _ in ENTITIES)),
                         metavar="ENTITY",
@@ -190,9 +185,9 @@ def parse_args(argv=None):
 
     parser.add_argument(dest='filter',
                         nargs='?',
-                        metavar="FILTER",
-                        help="Filter results by entity name (partial, case-insentitive)"
-                            " or, if --id, by its (numerical) ID.")
+                        metavar="NAME_OR_ID",
+                        help="Match ENTITY by its numerical ID or name"
+                            " (partial, case-insentitive).")
 
     args = parser.parse_args(argv)
     args.debug = args.loglevel == logging.DEBUG
@@ -241,14 +236,11 @@ def main(argv=None):
 
     # General entities
     entities = getattr(ss, args.entity)
-    if args.id:
-        try:
-            entities = entities.find_by_id(int(args.filter))
-        except ValueError:
-            log.error("When using --id, FILTER must be an integer: %s", args.filter)
-            return 1
-    else:
+    try:
+        entities = entities.find_by_id(int(args.filter))
+    except ValueError:
         entities = entities.find(args.filter)
+
     if not entities:
         log.error("No %s found for %r", args.entity, args.filter)
         return

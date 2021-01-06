@@ -51,14 +51,9 @@ def parse_args(argv=None):
                         action="store_true",
                         help="Apply changes and save.")
 
-    parser.add_argument('-i', '--id',
-                        default=False,
-                        action="store_true",
-                        help="Match QUALITY by ID instead of by name.")
-
     parser.add_argument(dest='quality',
                         metavar="QUALITY",
-                        help="Quality to look for.")
+                        help="Quality to look for, either by name or ID.")
 
     parser.add_argument(nargs='?',
                         dest='value',
@@ -79,13 +74,9 @@ def main(argv=None):
 
     ss = sunlesssea.SunlessSea()
 
-    if args.id:
-        try:
-            qualities = ss.autosave.qualities.find_by_id(int(args.quality))
-        except ValueError:
-            log.error("When using --id, QUALITY must be an integer: %s", args.quality)
-            return ERR
-    else:
+    try:
+        qualities = ss.autosave.qualities.find_by_id(int(args.quality))
+    except ValueError:
         qualities = ss.autosave.qualities.find(args.quality)
 
     found = len(qualities)
