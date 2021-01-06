@@ -1082,7 +1082,7 @@ class Requirement(QualityOperator):
             short=False,
     ):
         def add(fmt, value=None, adv=False, *args, **kwargs):
-            if not short and fmt.endswith(" {}"):
+            if not short and not adv and fmt.endswith(" {}"):
                 s = self.quality.status_for(value)
                 if s:
                     fmt += shortfmt.format(s)
@@ -1149,7 +1149,6 @@ class Requirement(QualityOperator):
                 fmt = "{ops}"
 
             elif op == 'MaxLevel':         add(maxfmt, value)
-            elif op == 'MaxLevelAdvanced': add(maxfmt, value, True)
             elif op == 'MaxAdvanced':      add(maxfmt, value, True)
             else:
                 add(elsefmt, value, adv='Advanced' in op, op=op)
