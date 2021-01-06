@@ -879,8 +879,8 @@ class QualityOperator(Entity):
                          self.parent, self)
 
 
-    def pretty(self):
-        return self._format()
+    def pretty(self, short=False):
+        return self._format(short=short)
 
 
     def wiki(self):
@@ -912,8 +912,9 @@ class QualityOperator(Entity):
             opsep=" and ",
             qtyopsep=" + ",
             ifsep=", only if ",
-            sep=" "):
-
+            sep=" ",
+            short=False,
+    ):
         def add(fmt, value, adv=False, *args, **kwargs):
             posopstrs.append(fmt.format((self._parse_adv(str(value),
                                                          advfmt,
@@ -1076,9 +1077,15 @@ class Requirement(QualityOperator):
             adjfmt="= {v1} or {v2}",
             # Unknwn operator
             elsefmt="{op}: {}",
+            # Short formats
+            shortfmt=" [{}]",
+            short=False,
     ):
-
         def add(fmt, value=None, adv=False, *args, **kwargs):
+            if not short and fmt.endswith(" {}"):
+                s = self.quality.status_for(value)
+                if s:
+                    fmt += shortfmt.format(s)
             opstrs.append(fmt.format((self._parse_adv(str(value),
                                                          advfmtq,
                                                          advfmtd)
@@ -1221,7 +1228,8 @@ class BaseEvent(Entity):
             if not short:
                 out.append("{}: {:d}".format(attr.title(), len(qualops)))
             # rely on indent() to rtrip each line
-            out.extend(indent(_.pretty(), 0 if short else 1) for _ in qualops)
+            out.extend(indent(_.pretty(short=short), 0 if short else 1)
+                       for _ in qualops)
             out.append("")  # add trailing '\n' only if here IS content
         return "\n".join(out)
 
