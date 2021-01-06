@@ -81,14 +81,10 @@ def main(argv=None):
 
     if args.id:
         try:
-            qid = int(args.quality)
+            qualities = ss.autosave.qualities.find_by_id(int(args.quality))
         except ValueError:
             log.error("When using --id, QUALITY must be an integer: %s", args.quality)
             return ERR
-        qualities = []
-        quality = ss.autosave.qualities.get(qid)
-        if quality:
-            qualities.append(quality)
     else:
         qualities = ss.autosave.qualities.find(args.quality)
 

@@ -176,6 +176,11 @@ def parse_args(argv=None):
                        action="store_const",
                        help="Show quality usage")
 
+    parser.add_argument('-i', '--id',
+                        default=False,
+                        action="store_true",
+                        help="Match FILTER by entity ID instead of by name.")
+
     parser.add_argument(dest='entity',
                         choices=sorted(set(ENTITIES) | set(_[0] for _ in ENTITIES)),
                         metavar="ENTITY",
@@ -186,7 +191,8 @@ def parse_args(argv=None):
     parser.add_argument(dest='filter',
                         nargs='?',
                         metavar="FILTER",
-                        help="Optional name filter to narrow results")
+                        help="Filter results by entity name (partial, case-insentitive)"
+                            " or, if --id, by its (numerical) ID.")
 
     args = parser.parse_args(argv)
     args.debug = args.loglevel == logging.DEBUG
@@ -234,7 +240,15 @@ def main(argv=None):
         return
 
     # General entities
-    entities = getattr(ss, args.entity).find(args.filter)
+    entities = getattr(ss, args.entity)
+    if args.id:
+        try:
+            entities = entities.find_by_id(int(args.filter))
+        except ValueError:
+            log.error("When using --id, FILTER must be an integer: %s", args.filter)
+            return 1
+    else:
+        entities = entities.find(args.filter)
     if not entities:
         log.error("No %s found for %r", args.entity, args.filter)
         return
@@ -1582,7 +1596,7 @@ class Entities(object):
 
     def find(self, name):
         '''Return Entities filtered by name, case-insensitive.
-            If falsy, return all entities
+            If name is falsy, return all entities
         '''
         if not name:
             return self
@@ -1590,6 +1604,17 @@ class Entities(object):
                               ss=self.ss,
                               entities=(_ for _ in self
                                         if re.search(name, _.name, re.IGNORECASE)))
+
+
+    def find_by_id(self, eid):
+        '''Like .find(), but matching entity ID instead of name.
+            Unlike .get() it always returns a container, either with a single
+            entity or empty if none was found.
+            Unlike .find(), a falsy ID will also return an empty container.
+        '''
+        return self.__class__(path=self.path,
+                              ss=self.ss,
+                              entities=(_ for _ in self if _.id == eid))
 
 
     def wikitable(self):
