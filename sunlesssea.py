@@ -474,6 +474,7 @@ class Entity(object):
 class Quality(Entity):
     _REQUIRED_FIELDS = {'Name'}
     _OPTIONAL_FIELDS = set((
+        "AvailableAt",
         "Description",
         "Image",
 
@@ -481,7 +482,6 @@ class Quality(Entity):
         "LevelDescriptionText",
         'LevelImageText',
 
-        "AvailableAt",
         "Cap",
         "Category",
         'DifficultyScaler',
@@ -572,6 +572,9 @@ class Quality(Entity):
 
     def pretty(self):
         pretty = super(Quality, self).pretty()
+
+        if self.availableat:
+            pretty += "\t{}\n".format(self.availableat)
 
         pretty += "\n\tCategory: {}".format(self.category)
         if self.tag:
