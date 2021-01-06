@@ -1457,7 +1457,7 @@ class Action(BaseEvent):
 
         page = (
             "|-\n"
-            "{rowspan}| {{{{action title|{name}}}}}\n"
+            "{rowspan}| {{{{action title|{name}}}}}\n{description}"
             "{rowspan}|\n"
             "<ul>\n"
             "{reqs}<br>\n"
@@ -1466,6 +1466,7 @@ class Action(BaseEvent):
             "{rowspan}|{note}\n"
         ).format(
             name=self._parse_adv(self.name, qnamefmt="[q:[[{}]]]"),
+            description=iif(self.description, "{}\n".format(self.description)),
             reqs="<br>\n".join(_.wiki() for _ in self.requirements) or "-",
             note=iif(note, " {{{{game note|{}}}}}".format(note)),
             rowspan=rowspan,
@@ -1570,7 +1571,8 @@ class Outcome(BaseEvent):
 
 
     def wiki(self):
-        page = iif(self.name, "{{{{effect title|{}}}}}\n".format(self.name), "")
+        page  = iif(self.name, "{{{{effect title|{}}}}}\n".format(self.name))
+        page += iif(self.description, "{}\n".format(self.description))
         pg = ""
 
         for effect in self.effects:
