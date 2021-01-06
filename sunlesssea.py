@@ -1457,7 +1457,7 @@ class Action(BaseEvent):
 
         page = (
             "|-\n"
-            "{rowspan}| {name}\n"
+            "{rowspan}| {{{{action title|{name}}}}}\n"
             "{rowspan}|\n"
             "<ul>\n"
             "{reqs}<br>\n"
@@ -1571,25 +1571,23 @@ class Outcome(BaseEvent):
 
     def wiki(self):
         page = iif(self.name, "{{{{effect title|{}}}}}\n".format(self.name), "")
-        page += "<ul>\n"
         pg = ""
 
         for effect in self.effects:
-            pg += "<li>{}\n".format(effect.wiki())
+            pg += "* {}\n".format(effect.wiki())
 
         if self.trigger and self.trigger is not self.parent.parent:
-            pg += "<li>{{{{trigger event|{}}}}}\n".format(self.trigger.name)
+            pg += "* {{{{trigger event|{}}}}}\n".format(self.trigger.name)
 
         if self.movetoarea:
-            pg += "<li>Goes to {{{{link icon|{}}}}}\n".format(self.movetoarea)
+            pg += "* {{{{trigger location|{}}}}}\n".format(self.movetoarea.name)
 
         if self.exoticeffects:
-            pg += "<li>{{{{action|{}}}}}\n".format(self.exoticeffects)
+            pg += "* {{{{action|{}}}}}\n".format(self.exoticeffects)
 
-        page += pg if pg else "-<br>\n"
-        page += "</ul>"
+        page += pg if pg else "<ul>-</ul>\n"
 
-        return page
+        return page.strip()
 
 
     def __str__(self):
