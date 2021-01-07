@@ -159,17 +159,20 @@ def parse_args(argv=None):
                         help="Perform integrity checks, takes about 20%% longer.")
 
     parser.add_argument('-d', '--datadir',
-                        dest='datadir',
                         default=get_datadir(),
                         help="Game data directory. [Default: %(default)s]")
 
     parser.add_argument('-f', '--format',
-                        dest='format',
                         choices=('bare', 'dump', 'json', 'pretty', 'wiki', 'wikipage'),
                         default='pretty',
                         help="Output format. 'wiki' is awesome!"
                             " Available formats: [%(choices)s]."
                             " [Default: %(default)s]")
+
+    parser.add_argument('-a', '--attribute',
+                        nargs=2,
+                        metavar=('ATTRIBUTE','VALUE'),
+                        help="Only entities where ATTRIBUTE == VALUE")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-U', '--usage', const="usage",
@@ -186,7 +189,7 @@ def parse_args(argv=None):
 
     parser.add_argument(dest='filter',
                         nargs='?',
-                        metavar="FILTER",
+                        metavar="MATCH",
                         help="Match entities by numerical ID or name"
                             " (partial, case-insentitive).")
 
@@ -241,6 +244,9 @@ def main(argv=None):
         entities = entities.find_by_id(int(args.filter or ""))
     except ValueError:
         entities = entities.find(args.filter)
+
+    if args.attribute:
+        entities = entities.filter(*args.attribute)
 
     if not entities:
         log.error("No %s found for %r", args.entity, args.filter)
@@ -1645,6 +1651,11 @@ class Entities(object):
         if entities is not None:
             for entity in entities:
                 self.add(entity, check=TEST_INTEGRITY)
+
+
+    def filter(self, attr, value):
+        entities=(_ for _ in self if str(getattr(_, attr, "")) == str(value))
+        return self.__class__(path=self.path, ss=self.ss, entities=entities)
 
 
     def find(self, name):
