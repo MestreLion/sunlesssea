@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
 #    Copyright (C) 2016 Rodrigo Silva (MestreLion) <linux@rodrigosilva.com>
 #
@@ -16,28 +15,40 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program. See <http://www.gnu.org/licenses/gpl.html>
 
-
 """
-    Tools for Sunless Sea data dumps
+    Tools for Sunless Sea data dumps and autosave editing
 """
 
-# Ideas
-# - pretty(short=True), so they can use each other
-#    Ex: Location.pretty(short=True) does not print description
-# - make pretty uniform across indent, \n, etc. Not there already
+# Ideas / To-Do list
+# ------------------
+# - Custom parsing for ExocticEffets (specially Game Win/Lose, Move to Port, etc)
+# - cmd-line arg for Outcomes, Effects, Requirements, Actions, including -a
+# - Rename Quality.usage() to .interactions(), create .obtain() and .usage()
+#   - obtain() for ways to get (positive Effects and shop buy)
+#   - usage() for ways to use/spend (Requirements, negative sffects, shop sell)
+#   - interactions() for both, all mentions (similar to current  usage())
+#     - Improve interactions():
+#       - Look for "[q:{id}]" in Advanced operators (done already?)
+#       - show all Event and Action Requirements, as well as all Outcomes.
+#         (as a side-effect, will dramatically simplify the code)
+# - Quality need a custom wikipage() with {{quality status}} listings
+# - pretty(short=True), so they can use each other [PARTIALLY DONE, need cmd-line]
+#    Ex: Location.pretty(short=True) does not print description, short Event
+#        does not print Quality status; short Quality does not print status list
+# - make pretty uniform across indent, \n, etc. Not there yet
 #    Idea: functions return with trailing '\n' if there is content
 #        Callers can .strip() if they want or "".join() directly
 # - format +[1 to x] so it can use {{qty}} to get non-text color
 # - read text statuses on numeric quality assignments/tests
 #    so "QualityX := 3" => "QualityX := 3, [3's Status Description]"
-#    or even "Description" (think about SAY)
+#    or even "Description" (think about SAY) [PARTIALLY DONE, can be smarter]
 # - Improve (or even completely deprecate) format_obj using better .format()
 #    specs and ideas from http://code.activestate.com/recipes/577227/
-# - Quality need a custom wikipage() with {{quality status}} listings
-# - Improve usage():
-#    - Look for "[q:{id}]" in Advanced operators
-#    - show all Event and Action Requirements, as well as all Outcomes.
-#        (as a side-effect, will dramatically simplify the code)
+
+# Knowledge
+# ------------------
+# Journal: sections named by Tag.
+
 
 import argparse
 import bisect
@@ -578,7 +589,7 @@ class Quality(Entity):
 
         if TEST_INTEGRITY:
             if self.assign and self.category not in (
-                  106,  # Officers
+                  106,  # Officers, with a couple exceptions
                   150,  # Curiosities (Zong of Zee and mis-categorized officers)
                   200,  # Cargo (assignable items are Equipments)
                 10000,  # Ships
