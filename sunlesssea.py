@@ -606,10 +606,10 @@ class Quality(Entity):
                 log.error("Category mismatch for %r: %d, assigns to %s",
                           self, self.category, self.assign)
 
-            if (
-                (self.category == 106  and not self.tag == "Officer") or
-                (self.tag == "Officer" and not self.category == 106 ) or
+            if self.is_officer and not self.assign:
+                log.error("Officer with no slot assignment: %r", self)
 
+            if (
                 (self.category == 10000 and not self.tag == "Ship"    ) or
                 (self.tag == "Ship"     and not self.category == 10000)
             ):
@@ -619,7 +619,13 @@ class Quality(Entity):
 
     @property
     def is_luck(self):
-        return self.category == 2000  # ID=432
+        return self.category == 2000  # A Single member, 'Luck', ID=432
+
+    @property
+    def is_officer(self):
+        # Most are 106, except Urbane Magician and Keeper-Moth, both 150
+        # Monkey Foundling, Eyeless Skull, Your Father: 106 but not Tag Officer
+        return self.category == 106 or self.tag == "Officer"
 
     @property
     def difficulty_factor(self):
