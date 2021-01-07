@@ -1087,119 +1087,139 @@ class Requirement(QualityOperator):
     )
     _OPTIONAL_FIELDS = QualityOperator._OPTIONAL_FIELDS | set(_OPS)
 
+    _Op = enum.Enum('Operator', (
+        'EQUAL',
+        'MIN',
+        'MAX',
+        'RANGE',
+        'LUCK',
+        'CHALLENGE',
+        'CHALLENGEADV',
+        'INVALID',
+    ))
 
-    def wiki(self):
-        return self._format(
-            "{{{{link icon|{quality.name}}}}}{sep}{ops}",
-            "{{{{challenge|{quality.name}|{}}}}}{opsep}{ops}",
-            "{{{{link icon|{quality.name}}}}} challenge"
-                " ({{{{action|{}%}}}} chance to win){opsep}{ops}",
-            "{{{{link icon|{quality.name}}}}} {ops}{opsep}challenge,"
-                " for 100%:<br>\n:<span style=\"color: teal;\">"
-                "[{}]*100/{quality.difficultyscaler}</span>",
-            advfmtq='([[{quality.name}]])',
-        )
+    def _tokenize(self):
+        # Create a copy of operators, filtering out irrelevant ones
+        ops = {_:self.operator[_] for _ in self._OPS if _ in self.operator}
+        tokens = []
 
+        def tokenize(optype, *args, **kwargs):
+            tokens.append((optype, value, op,
+                           op.startswith('Difficulty'),
+                           op.endswith('Advanced'),
+                           args, kwargs))
 
-    def _format(self,
-            # Defaults are suitable for __str__()
-            fmt="{quality}{sep}{ops}",
-            fmtcha="{quality} challenge ({} for 100%){opsep}{ops}",
-            fmtchaluck="{quality} challenge ({}%){opsep}{ops}",
-            fmtchaadv="{quality} challenge: "
-                        "({})*100/{quality.difficultyscaler}{opsep}{ops}",
-            sep=" ",  # only if there are more operators
-            opsep=" and ",  # separator between operators
-            advfmtd="[1 to {}]", advfmtq="[{quality}]",  # Advanced format
-            # Known operators
-            minfmt="≥ {}",
-            maxfmt="≤ {}",
-            eqfmt ="= {}",
-            adjfmt="= {v1} or {v2}",
-            # Unknwn operator
-            elsefmt="{op}: {}",
-            # Short formats
-            shortfmt=" [{}]",
-            short=False,
-    ):
-        def add(fmt, value=None, adv=False, *args, **kwargs):
-            if not short and not adv and fmt.endswith(" {}"):
-                s = self.quality.status_for(value)
-                if s:
-                    fmt += shortfmt.format(s)
-            opstrs.append(fmt.format((self._parse_adv(str(value),
-                                                         advfmtq,
-                                                         advfmtd)
-                                         if adv else value),
-                                        *args, **kwargs))
-
-        ops = {_:self.operator[_]
-               for _ in self.operator
-               if _ not in self._HIDE_OP}
-        opstrs = []
-        value  = ""
-
-        # Loop in _OPS to preserve order
+        # Unusual dict looping idiom to make sure that:
+        # - operations are looped in self._OPS order
+        # - operations can be removed/popped without affecting loop
         for op in self._OPS:
             if op not in ops:
                 continue
-
             value = ops[op]
 
-            if op == 'MinLevel':
-                # Look-ahead for MaxLevel, to combine '> x and < x' into '== x'
-                val = ops.get('MaxLevel', None)
-                if val == value:
-                    add(eqfmt, value)
-                    ops.pop('MaxLevel')
+            if op.startswith('Min'):  # MinLevel, MinAdvanced
+                # Look-ahead for Max op, to combine '>= x and =< x' into '== x'
+                maxop = 'Max{}'.format(op[3:])
+                valmax = ops.get(maxop, None)
+                if valmax == value:
+                    tokenize(self._Op.EQUAL)
+                    ops.pop(maxop)
 
-                # Look-ahead for adjacent values, combine into '== x or y'
-                elif val == value + 1:
-                    add(adjfmt, None, v1=value, v2=val)
-                    ops.pop('MaxLevel')
+                # Look-ahead for ranges, combine into '== x to y'
+                elif valmax is not None:
+                    tokenize(self._Op.RANGE, v1=value, v2=valmax)
+                    ops.pop(maxop)
 
                 else:
-                    # Add the string snippet
-                    add(minfmt, value)
+                    # Regular Min
+                    tokenize(self._Op.MIN)
 
-            elif op == 'MinAdvanced':
-                # Look-ahead for equal values
-                val = ops.get('MaxAdvanced', None)
-                if val == value:
-                    add(eqfmt, value, True)
-                    ops.pop('MaxAdvanced')
-                else:
-                    add(minfmt, value, True)
+            elif op.startswith('Max'):
+                tokenize(self._Op.MAX)
 
             elif op == 'DifficultyLevel':
-                if self.quality.category == 2000:  # "Luck", ID=432
-                    fmt = fmtchaluck
-                    value = 50 - value * self.quality.difficultyscaler
-                else:
-                    fmt = fmtcha
-                    value = (int(math.ceil(100.0 * value /
-                                          self.quality.difficultyscaler))
-                            if value and self.quality.difficultyscaler
-                            else value)
-                add(fmt, value, quality=self.quality, opsep="", ops="")
-                fmt = "{ops}"
+                value = self.quality.challenge_cap(value)
+                tokenize(self._Op.LUCK if self.quality.is_luck else
+                         self._Op.CHALLENGE)
 
             elif op == 'DifficultyAdvanced':
-                add(fmtchaadv, self._parse_adv(value, advfmtq, advfmtd),
-                    quality=self.quality, opsep="", ops="")
-                fmt = "{ops}"
+                tokenize(self._Op.CHALLENGEADV,
+                         scaler=self.quality.difficultyscaler,
+                         factor=self.quality.difficulty_factor)
 
-            elif op == 'MaxLevel':         add(maxfmt, value)
-            elif op == 'MaxAdvanced':      add(maxfmt, value, True)
             else:
-                add(elsefmt, value, adv='Advanced' in op, op=op)
+                tokenize(self._Op.INVALID, op=op)
+                log.error("Unknown operation in %r.%r.%r: %s = %r",
+                          self.parent.parent, self.parent, self, op, value)
+        return tokens
 
-        return fmt.format(value,
-                          quality=self.quality,
-                          operator=self.operator,
-                          sep=iif(opstrs, sep),
-                          opsep=iif(opstrs, opsep),
-                          ops=opsep.join(opstrs),
+
+    def _format(self, formats=None, showstatus=True, forceprefix=True):
+        fmts = {
+            'prefix':              "{quality}",
+            'sep':                 " ",
+            self._Op.EQUAL:        "= {}",
+            self._Op.MIN:          "≥ {}",
+            self._Op.MAX:          "≤ {}",
+            self._Op.RANGE:        "= {v1} to {v2}",
+            self._Op.CHALLENGE:    "challenge ({} for 100%)",
+            self._Op.CHALLENGEADV: "challenge ((100/{scaler}) * ({}) for 100%)",
+            self._Op.LUCK:         "challenge ({}% chance)",
+            self._Op.INVALID:      "{op} = {}",
+            'opsep':               " and ",
+            'status':              "{} [{status}]",
+            'advanced:q':          "[{quality}]",
+            'advanced:d':          "[1 to {}]",
+        }
+        fmts.update(formats or {})
+        tokens = self._tokenize()
+        prefix = forceprefix or not any(_[3] for _ in tokens)  # 3 = challenge
+        statusops = (
+            self._Op.EQUAL,
+            self._Op.MIN,
+            self._Op.MAX,
+            self._Op.INVALID,
+        )
+
+        def parse_adv(val):
+            return self._parse_adv(val, fmts['advanced:q'], fmts['advanced:d'])
+
+        def add_status(val):
+            s = self.quality.status_for(val)
+            if not s:
+                return val
+            return fmts['status'].format(value, status=s)
+
+        opstrs = []
+        for optype, value, op, _, advanced, args, kwargs in tokens:
+            if advanced:
+                value = parse_adv(value)
+                args = tuple(parse_adv(_) for _ in args)
+                kwargs = {_:parse_adv(kwargs[_]) for _ in kwargs}
+
+            elif showstatus and optype in statusops:
+                value = add_status(value)
+                args = tuple(add_status(_) for _ in args)
+                kwargs = {_:add_status(kwargs[_]) for _ in kwargs}
+
+            kwargs.update({'op': op, 'quality': self.quality})
+            opstrs.append(fmts[optype].format(value, *args, **kwargs))
+
+        return "{prefix}{sep}{ops}".format(
+            prefix = iif(prefix, fmts['prefix'].format(quality=self.quality)),
+            sep    = iif(opstrs, fmts['sep']),
+            ops    = fmts['opsep'].join(opstrs),
+        )
+
+
+    def wiki(self):
+        return self._format(formats={
+            self._Op.CHALLENGE:    "{{{{challenge|{quality.name}|{}}}}}",
+            self._Op.CHALLENGEADV: "{{{{challenge|{quality.name}|(100/{scaler}) * ({})}}}}",
+            self._Op.LUCK:         "{{{{link icon|{quality.name}}}}} challenge"
+                                   " ({{{{action|{}%}}}} chance to win)",
+            'advanced:q':          "([[{quality.name}]])"},
+            forceprefix = False,
         )
 
 
