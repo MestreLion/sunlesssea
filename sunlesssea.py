@@ -628,8 +628,8 @@ class Quality(Entity):
         return (self.change_status.get(value) or
                 self.level_status.get(value) or
                 largest_lesser(self.change_status, value) or
-                largest_lesser(self.level_status, value) or
-                "").rstrip('.')
+                largest_lesser(self.level_status, value)
+                or "").rstrip('.') or ""
 
 
     def pretty(self):
@@ -947,11 +947,12 @@ class QualityOperator(Entity):
             ifminfmt="≥ {}",  # "if ≥ {}"
             ifmaxfmt="≤ {}",  # "if ≤ {}"
             ifeqfmt="= {}",  # "if == {}"
-            ifadjfmt="= {v1} or {v2}",  # "if == {v1} or {v2}"
+            ifadjfmt="= {v1} to {v2}",  # "if == {v1} to {v2}"
             elsefmt="{op}: {}",
             opsep=" and ",
             qtyopsep=" + ",
             ifsep=", only if ",
+            statusfmt="{} [{status}]",
             sep=" ",
             showstatus=True,
     ):
@@ -970,6 +971,14 @@ class QualityOperator(Entity):
         ifopstrs  = []
         useqty = False  # ('Level' in ops or 'ChangeByAdvanced' in ops)
 
+        def add_status(val):
+            if not showstatus:
+                return val
+            s = self.quality.status_for(val)
+            if not s:
+                return val
+            return statusfmt.format(val, status=s)
+
         # Loop in _OPS to preserve order
         for op in self._OPS:
             if op not in ops:
@@ -981,20 +990,20 @@ class QualityOperator(Entity):
                 # Look-ahead, equal values
                 val = ops.get('OnlyIfNoMoreThan', None)
                 if val == value:
-                    ifopstrs.append(ifeqfmt.format(value))
+                    ifopstrs.append(ifeqfmt.format(add_status(value)))
                     ops.pop('OnlyIfNoMoreThan')
 
-                # Look-ahead for adjacent values
-                elif val == value + 1:
+                # Look-ahead for range values
+                elif val:
                     ifopstrs.append(ifadjfmt.format(v1=value, v2=val))
                     ops.pop('OnlyIfNoMoreThan')
 
                 else:
                     # Add the string snippet
-                    ifopstrs.append(ifminfmt.format(value))
+                    ifopstrs.append(ifminfmt.format(add_status(value)))
 
             elif op == 'OnlyIfNoMoreThan':
-                ifopstrs.append(ifmaxfmt.format(value))
+                ifopstrs.append(ifmaxfmt.format(add_status(value)))
 
             elif op == 'Level':
                 useqty = True
@@ -1008,8 +1017,8 @@ class QualityOperator(Entity):
 
                 qtyopstrs.append(self._parse_adv(val, advfmt, dfmt))
 
-            elif op == 'SetToExactly':         add(setfmt,    value)
-            elif op == 'SetToExactlyAdvanced': add(setfmt,    value, True)
+            elif op == 'SetToExactly':         add(setfmt, add_status(value))
+            elif op == 'SetToExactlyAdvanced': add(setfmt, value, True)
 
             else:
                 add(elsefmt, value, adv='Advanced' in op, op=op)
@@ -1188,7 +1197,7 @@ class Requirement(QualityOperator):
             s = self.quality.status_for(val)
             if not s:
                 return val
-            return fmts['status'].format(value, status=s)
+            return fmts['status'].format(val, status=s)
 
         opstrs = []
         for optype, value, op, _, advanced, args, kwargs in tokens:
