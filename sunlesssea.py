@@ -42,6 +42,7 @@
 import argparse
 import bisect
 import collections
+import enum
 import json
 import logging
 import math
@@ -108,6 +109,16 @@ def iif(cond, trueval, falseval=""):
         return falseval
 
 
+
+# FIXME: Not used yet
+def try_number(value):
+    try:
+        return int(value)
+    except ValueError:
+        try:
+            return float(value)
+        except ValueError:
+            return value
 
 
 ################################################################################
@@ -427,6 +438,8 @@ class Entity(object):
             qnamefmt: Formatting string for Quality name. No Qualities lookup
                         is actually performed, '{}' for the name content.
         '''
+        if not isinstance(text, str):
+            return text
 
         result = text
         for match in re.finditer(self._re_adv, text):
@@ -448,6 +461,7 @@ class Entity(object):
                                     value, self, text)
                 # By name
                 else:
+                    #FIXME: never really happens in current data
                     subst = qnamefmt.format(value)
 
             # Dice roll
@@ -548,8 +562,14 @@ class Quality(Entity):
         ):
             setattr(self, attr.lower(), atype(self._data.get(attr, default)))
 
+        def _parse_status(value):
+            if not value:
+                return {}
+            return {int(k):v for k,v in sorted(row.split("|")
+                                               for row in value.split("~"))}
+
         for attr, key, _ in self._status_fields:
-            setattr(self, attr, self._parse_status(self._data.get(key, "")))
+            setattr(self, attr, _parse_status(self._data.get(key, "")))
 
         # Both assign and enhancements referece other qualities that might not
         # have been loaded yet. Post-processing is performed by SunlessSea()
@@ -577,10 +597,24 @@ class Quality(Entity):
                           self, self.category, self.tag)
 
 
-    def _parse_status(self, value):
-        if not value:
-            return {}
-        return {int(k):v for k,v in sorted(row.split("|") for row in value.split("~"))}
+    @property
+    def is_luck(self):
+        return self.category == 2000  # ID=432
+
+    @property
+    def difficulty_factor(self):
+        if not self.difficultyscaler:
+            return 0
+        return 100.0 / self.difficultyscaler
+
+    def challenge_cap(self, difficulty):
+        if not(difficulty or self.difficultyscaler):
+            return difficulty
+
+        if self.is_luck:
+            return 50 - difficulty * self.difficultyscaler
+
+        return (int(math.ceil(difficulty * self.difficulty_factor)))
 
 
     def status_for(self, value):
@@ -886,7 +920,7 @@ class QualityOperator(Entity):
 
 
     def pretty(self, short=False):
-        return self._format(short=short)
+        return self._format(showstatus=not short)
 
 
     def wiki(self):
@@ -919,7 +953,7 @@ class QualityOperator(Entity):
             qtyopsep=" + ",
             ifsep=", only if ",
             sep=" ",
-            short=False,
+            showstatus=True,
     ):
         def add(fmt, value, adv=False, *args, **kwargs):
             posopstrs.append(fmt.format((self._parse_adv(str(value),
