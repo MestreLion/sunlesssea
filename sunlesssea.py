@@ -271,12 +271,21 @@ def main(argv=None):
         entities = entities.filter(*args.attribute)
 
     if not entities:
-        log.error("No %s found for %r", args.entity, args.filter)
-        return
+        if args.attribute and args.filter:
+            log.error("No %s found matching %r with %s == %r",
+                      args.entity, args.filter, *args.attribute)
+        elif args.attribute:
+            log.error("No %s found with %s == %r", args.entity, *args.attribute)
+        elif args.filter:
+            log.error("No %s found matching %r", args.entity, args.filter)
+        else:
+            log.error("No %s found", args.entity)
+        return 1
+
     if args.method == 'usage':
         if not args.entity == 'qualities':
             log.error("Method 'usage' only available for qualities")
-            return
+            return 1
         safeprint(entities.usage(args.format))
         return
 
