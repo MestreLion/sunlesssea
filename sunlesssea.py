@@ -1036,6 +1036,7 @@ class Effect(QualityOperator):
 
 
 class Requirement(QualityOperator):
+    # Order is important for ._format()!
     _OPS = (
         'DifficultyLevel',
         'DifficultyAdvanced',
@@ -1652,10 +1653,8 @@ class Entities(object):
         '''
         if not name:
             return self
-        return self.__class__(path=self.path,
-                              ss=self.ss,
-                              entities=(_ for _ in self
-                                        if re.search(name, _.name, re.IGNORECASE)))
+        entities=(_ for _ in self if re.search(name, _.name, re.IGNORECASE))
+        return self.__class__(path=self.path, ss=self.ss, entities=entities)
 
 
     def find_by_id(self, eid):
