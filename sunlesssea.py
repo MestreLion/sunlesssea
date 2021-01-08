@@ -819,22 +819,6 @@ class Quality(Entity):
 
     def trade(self):
         pass
-#        output = []
-#        items = []
-#         for shop in self.ss.shops:
-#             items = [_ for _ in shop.items if self in (_.item, _.currency)]
-#             if items:
-#
-#             for item in shop.items:
-#                 if self in (item.item, item.currency):
-#                     items.append(item)
-#                     results.setdefault(s, []).append(i)
-#                     out = "{} {}{}".format(
-#                             e.etype.upper(), e,
-#                             " [{}]".format(", ".join(unicode(_)
-#                                                      for _ in e.locations))
-#                                 if e.locations else "",
-#                     )
 
 
 
