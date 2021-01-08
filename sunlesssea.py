@@ -45,8 +45,6 @@
 #    or even "Description" (think about SAY) [PARTIALLY DONE, can be smarter]
 # - Improve (or even completely deprecate) format_obj using better .format()
 #    specs and ideas from http://code.activestate.com/recipes/577227/
-# - _parse_adv(): figure out what "[qb:ID]" is. See Event 236761, MaxAdvanced
-#   - Most likely "Base" or "Bonus" value, ie, Level or EffectiveLevelModifier
 # - Improve SaveQualities/SaveQuality: Better pretty/bare, proper idx on .wiki()
 # - Take a look on _IGNORED/OPTIONAL_FIELDS, and parse more of them.
 # - Use {{yellow|...}} or another template for wiki advanced text
@@ -329,7 +327,7 @@ class Entity:
     _IGNORED_FIELDS   = set()  # No attributes created
 
     _re_gamenote = re.compile('\[([^\]]+)]"?$')
-    _re_adv = re.compile('\[(?P<key>[a-z]):(?P<value>(?:[^][]+|\[[^][]+])+)]')
+    _re_adv = re.compile('\[(?P<key>[a-z]+):(?P<value>(?:[^][]+|\[[^][]+])+)]')
 
 
     def __init__(self, data, idx=0, ss=None):
@@ -455,17 +453,19 @@ class Entity:
         return repr(text)
 
 
-    def _parse_adv(self, text, qfmt="[{name}]", dfmt="[1 to {}]",
+    def _parse_adv(self, text, qfmt="[{name}]", qbfmt="[Base {name}]", dfmt="[1 to {}]",
                    noqfmt="[Quality({})]", qnamefmt="{{{}}}"):
         '''
         Parse "Advanced" strings containing references to entities in [k:v] format
 
         Current references are:
-        [q:ID]   - Quality by ID, return its current value ("Level")
-        [q:NAME] - Quality by name, return LevelDescriptionText for its Level
+        [q:ID]   - Quality by ID, return its current effective value, i.e.,
+                     Level + EffectiveLevelModifier
+        [qb:ID]  - Quality by ID, return its current base value, i.e., only Level
+        [q:NAME] - Quality by name, return LevelDescriptionText for its current Level
         [d:NUM]  - Dice roll, 1 to NUM
 
-        Some very basic nesting is also used, as in:
+        Some very basic nesting is also used, only in [d:...], as in:
         [d:[q:ID]] - Dice roll, 1 to Quality(ID).Level
 
         No other nestings are found, only combinations and expressions:
@@ -495,24 +495,26 @@ class Entity:
             quality = None
 
             # Qualities
-            if key == 'q':
+            if key in ('q', 'qb'):
                 # By ID, used in Requirements and Effects
                 if value.isdigit():
                     if self.ss and self.ss.qualities:
                         quality = self.ss.qualities.get(int(value))
                     if quality:
-                        subst = format_obj(qfmt, quality, quality=quality)
+                        subst = format_obj(qbfmt if key == 'qb' else qfmt,
+                                           quality, quality=quality)
                     else:
                         subst = noqfmt.format(value)
                         log.warning("Could not find Quality ID %s for %r in %r",
                                     value, self, text)
                 # By name, used in many Descriptions and in some Names
                 else:
+                    # Key 'qb' is never used with names, so only qnamefmt is used
                     subst = qnamefmt.format(value)
 
             # Dice roll
             elif key == 'd':
-                subst = dfmt.format(self._parse_adv(value, qfmt, dfmt,
+                subst = dfmt.format(self._parse_adv(value, qfmt, qbfmt, dfmt,
                                                     noqfmt, qnamefmt))
 
             else:
@@ -981,6 +983,7 @@ class QualityOperator(Entity):
             qfmtrev="{name} += ({qtyops}){ifsep}{ifs}",
             dfmt="[1 to {}]",
             advfmt="[{name}]",
+            advbfmt="[Base {name}]",
             lvlfmt="{:d}",
             lvladvfmt="{}",
             setfmt="= {}",  # ":= {}"
@@ -998,8 +1001,7 @@ class QualityOperator(Entity):
     ):
         def add(fmt, value, adv=False, *args, **kwargs):
             posopstrs.append(fmt.format((self._parse_adv(str(value),
-                                                         advfmt,
-                                                         dfmt)
+                                                         advfmt, advbfmt, dfmt)
                                          if adv else value),
                                         *args, **kwargs))
 
@@ -1055,7 +1057,7 @@ class QualityOperator(Entity):
                 if val[:1] not in "+-":
                     val = lvladvfmt.format(val)
 
-                qtyopstrs.append(self._parse_adv(val, advfmt, dfmt))
+                qtyopstrs.append(self._parse_adv(val, advfmt, advbfmt, dfmt))
 
             elif op == 'SetToExactly':         add(setfmt, add_status(value))
             elif op == 'SetToExactlyAdvanced': add(setfmt, value, True)
@@ -1218,6 +1220,7 @@ class Requirement(QualityOperator):
             'opsep':               " and ",
             'status':              "{} [{status}]",
             'advanced:q':          "[{quality}]",
+            'advanced:qb':         "[Base {quality}]",
             'advanced:d':          "[1 to {}]",
         }
         fmts.update(formats or {})
@@ -1231,7 +1234,8 @@ class Requirement(QualityOperator):
         )
 
         def parse_adv(val):
-            return self._parse_adv(val, fmts['advanced:q'], fmts['advanced:d'])
+            return self._parse_adv(val,
+                fmts['advanced:q'], fmts['advanced:qb'], fmts['advanced:d'])
 
         def add_status(val):
             s = self.quality.status_for(val)
@@ -1268,8 +1272,9 @@ class Requirement(QualityOperator):
             self._Op.CHALLENGEADV: "{{{{challenge|{quality.name}|(100/{scaler}) * ({})}}}}",
             self._Op.LUCK:         "{{{{link icon|{quality.name}}}}} challenge"
                                    " ({{{{action|{}%}}}} chance to win)",
-            'advanced:q':          "([[{quality.name}]])"},
-            forceprefix = False,
+            'advanced:q':          "([[{quality.name}]])",
+            'advanced:qb':         "(Base [[{quality.name}]])",
+            }, forceprefix = False,
         )
 
 
