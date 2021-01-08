@@ -44,6 +44,8 @@
 #    or even "Description" (think about SAY) [PARTIALLY DONE, can be smarter]
 # - Improve (or even completely deprecate) format_obj using better .format()
 #    specs and ideas from http://code.activestate.com/recipes/577227/
+# - _parse_adv(): figure out what "[qb:ID]" is. See Event 236761, MaxAdvanced
+# - Improve SaveQualities/SaveQuality: Better pretty/bare, proper idx on .wiki()
 
 # Knowledge
 # ------------------
@@ -255,13 +257,9 @@ def main(argv=None):
             safeprint(repr(event))
         return
 
-    if args.entity == "autosave":
-        for _ in ss.autosave.qualities.find(args.filter):
-            safeprint(_)
-        return
-
     # General entities
-    entities = getattr(ss, args.entity)
+    entities = (ss.autosave.qualities if args.entity == "autosave" else
+                getattr(ss, args.entity))
     try:
         entities = entities.find_by_id(int(args.filter or ""))
     except ValueError:
@@ -308,7 +306,7 @@ def main(argv=None):
 ################################################################################
 # Classes
 
-class Entity(object):
+class Entity:
     '''Base class for an Entity
         Subclasses MAY override or extend _REQUIRED_FIELDS, and MAY override
         _OPTIONAL_FIELDS and _IGNORED_FIELDS
@@ -554,6 +552,7 @@ class Quality(Entity):
         'QualitiesPossessedList',
         'UseEvent',
         'UsePyramidNumbers',
+        'VariableDescriptionText',  # Only on ID=126669, "{}" (string)
     ))
 
     _status_fields = (
@@ -1720,7 +1719,7 @@ class Outcome(BaseEvent):
 
 
 
-class Entities(object):
+class Entities:
     '''Base class for entity containers. Subclasses SHOULD override EntityCls!'''
     EntityCls=Entity
 
@@ -1885,7 +1884,7 @@ class Events(Entities):
 
 
 
-class SaveQuality(object):
+class SaveQuality:
     def __init__(self, data=None, idx=0, save=None, ss=None):
         self._data = data
         self.idx   = idx
@@ -1962,6 +1961,38 @@ class SaveQuality(object):
     def dump(self):
         return self._data
 
+    def to_json(self):
+        return json.dumps(self._data, indent=4, separators=(',',':'))
+
+    def bare(self, sep='\t'):  # @UnusedVariable
+        return str(self)
+
+    def pretty(self, short=False):  # @UnusedVariable
+        return str(self)
+
+    def wiki(self):
+        return self.name or str(self.id)
+
+    def wikirow(self):
+        #FIXME: idx should be from autosave, not quality
+        return format_obj(
+            "|-\n"
+            "| {idx}\n"
+            "| {id}\n"
+            "| [[{name}]]\n"
+            "| {{{{game icon|{image}}}}}\n"
+            "| {description}\n",
+            self.quality, description=self.quality._parse_adv(
+                "\n".join(_.strip() for _ in
+                          self.quality.description.replace("\r","").split('\n')),
+                qnamefmt="[q:[[{}]]]"))
+
+    def wikipage(self):
+        return format_obj(
+            "=={name}==\n"
+            "* <nowiki>{repr}</nowiki>\n"
+            "* {wiki}\n",
+            self, entity=self, wiki=self.wiki(), repr=repr(self))
 
     def __str__(self):
         statusstr = iif(self.status, " [{}]".format(self.status))
@@ -1996,9 +2027,11 @@ class SaveQualities(Entities):
         self.save = kwargs.get('save', None)
         super(SaveQualities, self).__init__(*args, **kwargs)
 
+    def pretty(self):
+        return "\n".join((_.pretty().strip() for _ in self))
 
 
-class Save(object):
+class Save:
     def __init__(self, data=None, ss=None, path=None):
         self._data = data
         self.path  = path
@@ -2024,7 +2057,7 @@ class Save(object):
 
 
 
-class SunlessSea(object):
+class SunlessSea:
     '''
         Manager class, the one that loads the JSON files
         and call each entity container's constructor
