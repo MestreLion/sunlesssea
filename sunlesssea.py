@@ -21,6 +21,7 @@
 
 # Ideas / To-Do list
 # ------------------
+# - Improve Entities.filter(): if attr value is str, do partial/insentive like find()
 # - Custom parsing for ExocticEffets (specially Game Win/Lose, Move to Port, etc)
 # - cmd-line arg for Outcomes, Effects, Requirements, Actions, including -a
 # - Rename Quality.usage() to .interactions(), create .obtain() and .usage()
@@ -48,6 +49,8 @@
 #   - Most likely "Base" or "Bonus" value, ie, Level or EffectiveLevelModifier
 # - Improve SaveQualities/SaveQuality: Better pretty/bare, proper idx on .wiki()
 # - Take a look on _IGNORED/OPTIONAL_FIELDS, and parse more of them.
+# - Use {{yellow|...}} or another template for wiki advanced text
+# - Use {{status|...}} or another template for wiki quality status
 
 # Knowledge
 # ------------------
@@ -367,6 +370,29 @@ class Entity:
         # Just a convenience. Provisional name (and method)
         return self.__class__.__name__
 
+    @property
+    def name_adv(self):
+        return self._parse_adv(self.name)
+
+    @property
+    def description_adv(self):
+        return self._parse_adv(self.description)
+
+    @property
+    def description_pretty(self):
+        return self._pretty_text(self.description_adv)
+
+    @property
+    def name_wiki(self):
+        return self._parse_adv(self.name, qnamefmt="[q:[[{}]]]")
+
+    @property
+    def description_wiki(self):
+        return self._parse_adv(
+            "\n".join(_.strip() for _ in
+                      self.description.replace("\r","").split('\n')),
+            qnamefmt="[q:[[{}]]]")
+
 
     def dump(self):
         return self._data
@@ -385,17 +411,17 @@ class Entity:
 
     def pretty(self, short=False):
         pretty = "{:d}".format(self.id)
-        if self.name:        pretty += " - {}".format(self.name)
+        if self.name:        pretty += " - {}".format(self.name_adv)
         if self.image:       pretty += " ({})".format(self.image)
         if self.description and not short:
             # Trailing '\n' is intentional, blank line after Description
-            pretty += "\n\t{}\n".format(self._desc(self.description))
+            pretty += "\n\t{}\n".format(self.description_pretty)
         #pretty += "\n"
         return pretty
 
 
     def wiki(self):
-        return self.name or str(self.id)
+        return self.name_wiki or str(self.id)
 
 
     def wikirow(self):
@@ -403,26 +429,23 @@ class Entity:
             "|-\n"
             "| {idx}\n"
             "| {id}\n"
-            "| [[{name}]]\n"
+            "| [[{name_wiki}]]\n"
             "| {{{{game icon|{image}}}}}\n"
-            "| {description}\n",
-            self, description=self._parse_adv(
-                "\n".join(_.strip() for _ in
-                          self.description.replace("\r","").split('\n')),
-                qnamefmt="[q:[[{}]]]"))
+            "| {description_wiki}\n",
+            self)
 
 
     def wikipage(self):
         return format_obj(
-            "=={name}==\n"
+            "=={name_wiki}==\n"
             "* <nowiki>{repr}</nowiki>\n"
             "* {wiki}\n",
             self, entity=self, wiki=self.wiki(), repr=repr(self))
 
 
-    def _desc(self, text, cut=120, elipsis="(...)"):
-        '''Quotes and limits a description, and replace control characters'''
-        if len(text) > cut:
+    def _pretty_text(self, text, cut=120, elipsis="(...)"):
+        '''Quotes and limits a text, replacing control characters'''
+        if cut and len(text) > cut:
             text = text[:cut-len(elipsis)] + "(...)"
         # repr() quotes and fixes \n, \r
         return repr(text)
@@ -456,7 +479,7 @@ class Entity:
             noqfmt:   Formatting string for Quality ID not found in Qualities
                         '{}' for the ID
             qnamefmt: Formatting string for Quality name. No Qualities lookup
-                        is actually performed, '{}' for the name content.
+                        is actually performed. '{}' for the name content.
         '''
         if not isinstance(text, str):
             return text
@@ -469,7 +492,7 @@ class Entity:
 
             # Qualities
             if key == 'q':
-                # By ID
+                # By ID, used in Requirements and Effects
                 if value.isdigit():
                     if self.ss and self.ss.qualities:
                         quality = self.ss.qualities.get(int(value))
@@ -479,9 +502,8 @@ class Entity:
                         subst = noqfmt.format(value)
                         log.warning("Could not find Quality ID %s for %r in %r",
                                     value, self, text)
-                # By name
+                # By name, used in many Descriptions and in some Names
                 else:
-                    #FIXME: never really happens in current data
                     subst = qnamefmt.format(value)
 
             # Dice roll
@@ -826,7 +848,7 @@ class Location(Entity):
     def pretty(self):
         pretty = super(Location, self).pretty().strip()  # No '\n' after Description
         if self.message:
-            pretty += "\n\tMessage: {}".format(self._desc(self.message))
+            pretty += "\n\tMessage: {}".format(self._pretty_text(self.message))
         return pretty
 
 
@@ -1420,9 +1442,9 @@ class Event(BaseEvent):
         ) if self.location else ("", "")
 
         header=(
-            '=={self.name}==\n'
+            '=={self.name_wiki}==\n'
             '{{{{Infobox story\n'
-            '|name         = {self.name}\n'
+            '|name         = {self.name_wiki}\n'
             '|image        = SS {self.image}gaz.png\n'
             '|id           = {self.id}\n'
             '|px           = 260px\n'
@@ -1430,12 +1452,12 @@ class Event(BaseEvent):
 #            '|type         = [[Story Event#Pigmote Isle|Pigmote Isle]]'
             '{linked}'
             '}}}}\n'
-            "'''{self.name}''' is a [[Sunless Sea]] [[Story Event]]{inloc}"
+            "'''{self.name_wiki}''' is a [[Sunless Sea]] [[Story Event]]{inloc}"
         ).format(**locals())
 
         description=(
             '===Description===\n'
-            "''\"{.description}\"''"
+            "''\"{.description_wiki}\"''"
         ).format(self) if self.description else ""
 
         requirements=(
@@ -1590,8 +1612,8 @@ class Action(BaseEvent):
             "{firstrow}"  # firstrow always contains leading '|' and trailing '\n'
             "{rowspan}|{note}\n"
         ).format(
-            name=self._parse_adv(self.name, qnamefmt="[q:[[{}]]]"),
-            description=iif(self.description, "{}\n".format(self.description)),
+            name=self.name_wiki,
+            description=iif(self.description, "{}\n".format(self.description_wiki)),
             reqs="<br>\n".join(_.wiki() for _ in self.requirements) or "-",
             note=iif(note, " {{{{game note|{}}}}}".format(note)),
             rowspan=rowspan,
@@ -1677,7 +1699,7 @@ class Outcome(BaseEvent):
         ]
 
         if not short:
-            out.append(indent(super(Outcome, self).pretty(short=True)))
+            out.append(indent(super(Outcome, self).pretty(short=False)))
 
         out.append(indent(self._pretty_qualops('effects', short=short)))
 
@@ -1696,8 +1718,8 @@ class Outcome(BaseEvent):
 
 
     def wiki(self):
-        page  = iif(self.name, "{{{{effect title|{}}}}}\n".format(self.name))
-        page += iif(self.description, "{}\n".format(self.description))
+        page  = iif(self.name, "{{{{effect title|{}}}}}\n".format(self.name_wiki))
+        page += iif(self.description, "{}\n".format(self.description_wiki))
         pg = ""
 
         for effect in self.effects:
@@ -1985,13 +2007,10 @@ class SaveQuality:
             "|-\n"
             "| {idx}\n"
             "| {id}\n"
-            "| [[{name}]]\n"
+            "| [[{name_wiki}]]\n"
             "| {{{{game icon|{image}}}}}\n"
-            "| {description}\n",
-            self.quality, description=self.quality._parse_adv(
-                "\n".join(_.strip() for _ in
-                          self.quality.description.replace("\r","").split('\n')),
-                qnamefmt="[q:[[{}]]]"))
+            "| {description_wiki}\n",
+            self.quality)
 
     def wikipage(self):
         return format_obj(
