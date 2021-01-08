@@ -45,7 +45,9 @@
 # - Improve (or even completely deprecate) format_obj using better .format()
 #    specs and ideas from http://code.activestate.com/recipes/577227/
 # - _parse_adv(): figure out what "[qb:ID]" is. See Event 236761, MaxAdvanced
+#   - Most likely "Base" or "Bonus" value, ie, Level or EffectiveLevelModifier
 # - Improve SaveQualities/SaveQuality: Better pretty/bare, proper idx on .wiki()
+# - Take a look on _IGNORED/OPTIONAL_FIELDS, and parse more of them.
 
 # Knowledge
 # ------------------
@@ -123,7 +125,7 @@ def iif(cond, trueval, falseval=""):
 
 
 
-# FIXME: Not used yet
+# FIXME: Not used yet, most likely will never be
 def try_number(value):
     try:
         return int(value)
@@ -643,6 +645,9 @@ class Quality(Entity):
 
 
     def status_for(self, value):
+        #FIXME: add an option for bisect_right(), for tests on Min value (<=)
+        # See https://docs.python.org/3/library/bisect.html and
+        #     https://code.activestate.com/recipes/577197-sortedcollection/
         def largest_lesser(d, v):
             if not d:
                 return
@@ -1241,13 +1246,14 @@ class Requirement(QualityOperator):
 
         return "{prefix}{sep}{ops}".format(
             prefix = iif(prefix, fmts['prefix'].format(quality=self.quality)),
-            sep    = iif(opstrs, fmts['sep']),
+            sep    = iif(prefix and opstrs, fmts['sep']),
             ops    = fmts['opsep'].join(opstrs),
         )
 
 
     def wiki(self):
         return self._format(formats={
+            'prefix':              "{{{{link icon|{quality.name}}}}}",
             self._Op.CHALLENGE:    "{{{{challenge|{quality.name}|{}}}}}",
             self._Op.CHALLENGEADV: "{{{{challenge|{quality.name}|(100/{scaler}) * ({})}}}}",
             self._Op.LUCK:         "{{{{link icon|{quality.name}}}}} challenge"
@@ -1615,13 +1621,13 @@ class Action(BaseEvent):
 class Outcome(BaseEvent):
     _REQUIRED_FIELDS = set(('QualitiesAffected',))
     _OPTIONAL_FIELDS = BaseEvent._OPTIONAL_FIELDS - {'Image'} | set((
+        'ExoticEffects',
         'LinkToEvent',
         'MoveToArea',
     ))
     _IGNORED_FIELDS  = set((
         'Category',
         'ChildBranches',
-        'ExoticEffects',
         'SwitchToSetting',
         'SwitchToSettingId',
         'Urgency',
