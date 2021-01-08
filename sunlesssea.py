@@ -266,7 +266,11 @@ def main(argv=None):
     entities = (ss.autosave.qualities if args.entity == "autosave" else
                 getattr(ss, args.entity))
     try:
+        # If args.filter is a valid integer, try finding entity by ID.
+        # If not a valid integer OR not found by ID, try finding by Name.
         entities = entities.find_by_id(int(args.filter or ""))
+        if not entities:
+            raise ValueError
     except ValueError:
         entities = entities.find(args.filter)
 
