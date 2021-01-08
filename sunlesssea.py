@@ -49,6 +49,8 @@
 # - Take a look on _IGNORED/OPTIONAL_FIELDS, and parse more of them.
 # - Use {{yellow|...}} or another template for wiki advanced text
 # - Use {{status|...}} or another template for wiki quality status
+# - Revamp QualityOperator._format() the same way done in Requirement.
+#   - Also, either move to Effects (good) or unify them both (possibly not viable)
 
 # Knowledge
 # ------------------
@@ -1964,7 +1966,6 @@ class SaveQuality:
         # To make SaveQualities.find() work
         return self.quality.name
 
-
     @property
     def status(self):
         return self.quality.status_for(self.value)
@@ -1972,8 +1973,6 @@ class SaveQuality:
     @property
     def value(self):
         return self._data['Level']
-
-
     @value.setter
     def value(self, value):
         self._data['Level'] = int(value)
