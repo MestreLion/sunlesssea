@@ -2228,8 +2228,12 @@ class SunlessSea:
 if __name__ == '__main__':
     try:
         sys.exit(main(sys.argv[1:]))
+    except BrokenPipeError:
+        # https://docs.python.org/3/library/signal.html#note-on-sigpipe
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
     except Exception as e:
         log.critical(e, exc_info=True)
         sys.exit(1)
     except KeyboardInterrupt:
-        pass
+        sys.exit(2)  # signal.SIGINT.value
