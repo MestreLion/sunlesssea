@@ -51,10 +51,18 @@
 # - Use {{status|...}} or another template for wiki quality status
 # - Revamp QualityOperator._format() the same way done in Requirement.
 #   - Also, either move to Effects (good) or unify them both (possibly not viable)
+# - For Officers, parse and display "UseEvent": the event triggered on Use/Talk
+# - Create a ShipSlots hardcoded mapping table, recreating game DLL data
 
 # Knowledge
 # ------------------
 # Journal: sections named by Tag.
+# Ship Slots: the Ship<->Slots mapping are hardcoded in game's DLL files :(
+#   But can be somewhat edited by changing the Slot Quality value to 1
+#   (meaning you/the ship "possess" the slot). Whenever you change ships,
+#   game resets the slots values to the hardcoded ones.
+#   This allows editing the slots of your *current* ship, but prevents getting
+#   other ship's slots from JSON data
 
 
 import argparse
