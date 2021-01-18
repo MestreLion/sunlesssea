@@ -75,6 +75,7 @@ import math
 import os
 import re
 import sys
+import urllib.parse
 
 
 log = logging.getLogger(os.path.basename(os.path.splitext(__file__)[0]))
@@ -216,6 +217,10 @@ def parse_args(argv=None):
                        dest='method',
                        action="store_const",
                        help="Show quality usage")
+    group.add_argument('-R', '--related', const="related",
+                       dest='method',
+                       action="store_const",
+                       help="Show event related images")
 
     parser.add_argument(dest='entity',
                         choices=sorted(set(ENTITIES) | set(_[0] for _ in ENTITIES)),
@@ -302,6 +307,12 @@ def main(argv=None):
             log.error("Method 'usage' only available for qualities")
             return 1
         safeprint(entities.usage(args.format))
+        return
+    elif args.method == 'related':
+        if not args.entity == 'events':
+            log.error("Method 'related' only available for events")
+            return 1
+        safeprint(entities.wiki_linkicons())
         return
 
     if args.format == 'wiki':
@@ -404,6 +415,15 @@ class Entity:
             "\n".join(_.strip() for _ in
                       self.description.replace("\r","").split('\n')),
             qnamefmt="[q:[[{}]]]")
+
+    @property
+    def image_wiki_title(self):
+        return urllib.parse.quote("File:SS {}.png".format(
+            self.name.replace(":", "").replace("?", "")))
+
+    @property
+    def image_wiki_file(self):
+        return "File:SS {}small.png".format(self.image or "")
 
 
     def dump(self):
@@ -1427,6 +1447,11 @@ class Event(BaseEvent):
             self.actions.append(Action(data=item, idx=i, parent=self, ss=self.ss))
 
 
+    @property
+    def image_wiki_file(self):
+        return "File:SS {}gaz.png".format(self.image or "")
+
+
     def pretty(self, short=False):
         out = [super(Event, self).pretty(location=self.location,
                                          short=short).strip()]
@@ -1494,6 +1519,9 @@ class Event(BaseEvent):
             .format("\n".join(_.wikirow() for _ in self.actions))
         ) if self.actions else ""
 
+        for entity in sorted(self._related()):
+            log.error(entity)
+
         return "\n\n\n----\n".join(filter(None, (
             header,
             description,
@@ -1501,6 +1529,32 @@ class Event(BaseEvent):
             effects,
             actions,
         )))
+
+
+    def wiki_linkicons(self):
+        for entity in sorted(self._related(), key=lambda _: _.name):
+            yield '\n'.join(
+                ("{e.name}",
+                 "https://sunlesssea.gamepedia.com/{e.image_wiki_title}?action=edit",
+                 "#REDIRECT [[{e.image_wiki_file}]]")).format(e=entity)
+
+
+    def _related(self):
+        """Set of all entities related to the Event
+
+        Qualitites in all effects and requirements,
+        including actions and its outcomes,
+        and also Events and Locations from such outcomes
+        """
+        entities = set([self])
+        qualityiters = [self.requirements, self.effects]
+        for action in self.actions:
+            qualityiters.append(action.requirements)
+            for outcome in action.outcomes:
+                qualityiters.append(outcome.effects)
+                entities.update(_ for _ in (outcome.trigger, outcome.movetoarea) if _)
+        entities.update(__.quality for _ in qualityiters for __ in _)
+        return entities
 
 
 
@@ -1914,6 +1968,10 @@ class Events(Entities):
                                     ((lid  and _.location.id == lid) or
                                      (name and re.search(name, _.location.name,
                                                          re.IGNORECASE))))))
+
+
+    def wiki_linkicons(self):
+        return "\n\n---\n\n".join("\n\n".join(_.wiki_linkicons()) for _ in self)
 
 
 
