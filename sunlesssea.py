@@ -983,6 +983,7 @@ class QualityOperator(Entity):
             lvlfmt="{:+d}",
             lvladvfmt="+{}",
             advfmt='([[{name}]])',
+            statusfmt='{} {{{{status|{status}}}}}',
         )
 
 
@@ -1282,6 +1283,7 @@ class Requirement(QualityOperator):
             self._Op.CHALLENGEADV: "{{{{challenge|{quality.name}|(100/{scaler}) * ({})}}}}",
             self._Op.LUCK:         "{{{{link icon|{quality.name}}}}} challenge"
                                    " ({{{{action|{}%}}}} chance to win)",
+            'status':              "{} {{{{status|{status}}}}}",
             'advanced:q':          "([[{quality.name}]])",
             'advanced:qb':         "(Base [[{quality.name}]])",
             }, forceprefix = False,
