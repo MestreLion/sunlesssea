@@ -414,7 +414,7 @@ class Entity:
         return self._parse_adv(
             "\n".join(_.strip() for _ in
                       self.description.replace("\r","").split('\n')),
-            qnamefmt="[q:[[{}]]]")
+            qnamefmt="{{{{quality|{}}}}}")
 
     @property
     def image_wiki_title(self):
