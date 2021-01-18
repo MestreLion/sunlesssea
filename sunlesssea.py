@@ -1519,9 +1519,6 @@ class Event(BaseEvent):
             .format("\n".join(_.wikirow() for _ in self.actions))
         ) if self.actions else ""
 
-        for entity in sorted(self._related()):
-            log.error(entity)
-
         return "\n\n\n----\n".join(filter(None, (
             header,
             description,
