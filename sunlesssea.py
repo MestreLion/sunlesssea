@@ -425,6 +425,13 @@ class Entity:
     def image_wiki_file(self):
         return "File:SS {}small.png".format(self.image or "")
 
+    @property
+    def gamenote(self):
+        match = re.search(self._re_gamenote, self.description)
+        if match:
+            return match.group(1)
+        return ""
+
 
     def dump(self):
         return self._data
@@ -1612,11 +1619,8 @@ class Action(BaseEvent):
 
 
     @property
-    def gamenote(self):
-        match = re.search(self._re_gamenote, self.description)
-        if match:
-            return match.group(1)
-        return ""
+    def description_wiki(self):
+        return re.sub(self._re_gamenote, "", super().description_wiki).strip()
 
 
     def pretty(self):
@@ -1632,7 +1636,9 @@ class Action(BaseEvent):
         outcomes = len(self.outcomes)
         rows = 2 * outcomes - (0 if self.canfail else 1)
         rowspan = iif(rows > 1, '| rowspan="{}"              '.format(rows))
-        note = self.gamenote  # save to avoid multiple calls to property
+
+        # save to avoid multiple calls to property
+        notes = filter(None, (_.gamenote for _ in (self, *self.outcomes)))
 
         def innerheader(outcome):
             return ("| {{{{style inner header{rare} "
@@ -1671,7 +1677,7 @@ class Action(BaseEvent):
             name=self.name_wiki,
             description=iif(self.description, "{}\n".format(self.description_wiki)),
             reqs="<br>\n".join(_.wiki() for _ in self.requirements) or "-",
-            note=iif(note, " {{{{game note|{}}}}}".format(note)),
+            note='\n\n'.join(" {{{{game note|{}}}}}".format(_) for _ in notes),
             rowspan=rowspan,
             firstrow=firstrow,
         )
@@ -1747,6 +1753,11 @@ class Outcome(BaseEvent):
         if self._data.get('QualitiesRequired'):
             log.warn("%r have non-null requirements: %s", self,
                      self._data['QualitiesRequired'])
+
+
+    @property
+    def description_wiki(self):
+        return re.sub(self._re_gamenote, "", super().description_wiki).strip()
 
 
     def pretty(self, short=False):
