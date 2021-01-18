@@ -1641,8 +1641,8 @@ class Action(BaseEvent):
             return ("| {{{{style inner header{rare} "
                     "| {label} event{chance}\n"
             ).format(
-                label  = outcome.label.replace(" Default", ""),         # lame
-                rare   = iif("Rare" in outcome.label, "|*}}", "}}  "),  # lamer
+                label  = re.sub(" [Dd]efault", "", outcome.label),
+                rare   = iif("Rare" in outcome.label, "|*}}", "}}  "),  # lame
                 chance = iif(outcome.chance, " ({}% chance)".format(outcome.chance)),
             )
 
