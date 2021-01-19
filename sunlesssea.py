@@ -1513,12 +1513,13 @@ class Event(BaseEvent):
             .format(_.wiki()) for _ in self.requirements
         ) if self.effects else ""
 
+        # Percentages don't add up to 100%, but consistent rest of the with wiki
         actions = (
             '===Interactions===\n'
             '{{| class="ss-table" style="width: 100%;"\n'
-            '! style="width:20%;" | Interaction\n'
-            '! style="width:35%;" | Unlocked by\n'
-            '! style="width:35%;" | Effects\n'
+            '! style="width:10%;" | Interaction\n'
+            '! style="width:15%;" | Unlocked by\n'
+            '! style="width:15%;" | Effects\n'
             '! style="width:10%;" | Notes\n'
             '\n'
             '{}\n'
