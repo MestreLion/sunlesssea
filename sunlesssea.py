@@ -21,6 +21,8 @@
 
 # Ideas / To-Do list
 # ------------------
+# - Make q/e/l/a entity cmd arg optional, by default searches all entities.
+# - Create --exact|-E to match exact names (useful for 'supplies' and others)
 # - Improve Entities.filter(): if attr value is str, do partial/insentive like find()
 # - Custom parsing for ExocticEffets (specially Game Win/Lose, Move to Port, etc)
 # - cmd-line arg for Outcomes, Effects, Requirements, Actions, including -a
