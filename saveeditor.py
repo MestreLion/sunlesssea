@@ -46,6 +46,11 @@ def parse_args(argv=None):
                        action="store_const",
                        help="Verbose mode, output extra info.")
 
+    parser.add_argument('-a', '--add',
+                        default=False,
+                        action="store_true",
+                        help="Add instead of setting VALUE to QUALITY.")
+
     parser.add_argument('-s', '--save',
                         default=False,
                         action="store_true",
@@ -102,9 +107,14 @@ def main(argv=None):
 
     quality = qualities[0]
     log.debug(repr(quality))
+
+    value = args.value
+    if args.add:
+        value += quality.value
+
     log.info("Changing quality [%s] '%s' from %s to %s",
-             quality.id, quality.name, quality.value, args.value)
-    quality.value = args.value
+             quality.id, quality.name, quality.value, value)
+    quality.value = value
 
     if args.save:
         log.debug(repr(quality))
