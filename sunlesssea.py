@@ -284,12 +284,8 @@ def main(argv=None):
         return
 
     if args.method == 'cargo':
-        hold = ss.autosave.qualities.find('hold') or 0
-        if hold:
-            hold = hold[0].value + hold[0].modifier
-        else:
-            log.warning("No 'Hold' quality found in Autosave, maybe it is corrupt?")
-        print("Cargo in hold: {}/{}".format(ss.autosave.cargo, hold))
+        print("Cargo in hold: {}/{}".format(ss.autosave.cargo,
+                                            ss.autosave.hold))
         return
 
     # General entities
@@ -2174,6 +2170,15 @@ class Save:
     @property
     def cargo(self):
         return sum(1 if _.in_cargo else 0 for _ in self.qualities)
+
+    @property
+    def hold(self):
+        hold = self.qualities.find('hold') or 0
+        if hold:
+            hold = hold[0].value + hold[0].modifier
+        else:
+            log.warning("No 'Hold' quality found in Autosave, maybe it is corrupt?")
+        return hold
 
 
     def dump(self):
