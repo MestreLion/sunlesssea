@@ -1000,8 +1000,8 @@ class QualityOperator(Entity):
                          self.parent, self)
 
 
-    def pretty(self, short=False):
-        return self._format(showstatus=not short)
+    def pretty(self, short=False):  # @UnusedVariable
+        return self._format()  # (showstatus=not short), changed for Quality.usage()
 
 
     def wiki(self):
