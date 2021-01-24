@@ -609,6 +609,7 @@ class Quality(Entity):
 
         'AssignToSlot',
         'Enhancements',
+        'UseEvent',
     ))
     _IGNORED_FIELDS  = set((
         'AllowedOn',
@@ -619,7 +620,6 @@ class Quality(Entity):
         'PyramidNumberIncreaseLimit',
         'QEffectPriority',
         'QualitiesPossessedList',
-        'UseEvent',
         'UsePyramidNumbers',
         'VariableDescriptionText',  # Only on ID=126669, "{}" (string)
     ))
@@ -660,9 +660,11 @@ class Quality(Entity):
             setattr(self, attr, _parse_status(self._data.get(key, "")))
 
         # Both assign and enhancements referece other qualities that might not
-        # have been loaded yet. Post-processing is performed by SunlessSea()
+        # have been loaded yet, as well as UseEvent.
+        # Post-processing for them is performed by SunlessSea()
         self.assign = self._data.get('AssignToSlot', {}).get('Id', None)
         self.enhancements = self._data.get('Enhancements', [])
+        self.event = self._data.get('UseEvent', {}).get('Id', None)
 
         if TEST_INTEGRITY:
             if self.assign and self.category not in (
@@ -739,6 +741,9 @@ class Quality(Entity):
         pretty += "\n\tCategory: {}".format(self.category)
         if self.tag:
             pretty += "\n\tTag: {}".format(self.tag)
+
+        if self.event:
+            pretty += "\n\tUse event: {}".format(self.event.bare(sep=" - "))
 
         if self.assign:
             pretty += "\n\tAssignable to {} slot".format(self.assign)
@@ -2175,13 +2180,27 @@ class SunlessSea:
         self.shops = Shops(entities=(_ for _ in self._create_shop()), ss=self)
         self.ports = None  # soon!
 
-        # Add references to other Qualities in 'Enhancements' and 'AssignToSlot'
+        # Add references to other Qualities in 'Enhancements' and 'AssignToSlot',
+        # and to Events in UseEvent
         for quality in self.qualities:
+            # Enhancements
             quality.enhancements = [
                 Effect(data=_d, idx=_i, ss=self, parent=quality)
                 for _i, _d in enumerate(quality.enhancements, 1)
             ]
 
+            # UseEvent
+            if quality.event:
+                event = self.events.get(quality.event)
+                if not event:
+                    # Create a dummy one
+                    event = Event(ss=self, data=dict(Id=quality.event,
+                                                     ChildBranches=[],
+                                                     QualitiesRequired=[]))
+                    log.error("%r uses non-existing event: %r", quality, event)
+                quality.event = event
+
+            # AssingTo
             slot = quality.assign
             if slot is None:
                 continue
