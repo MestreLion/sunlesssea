@@ -223,10 +223,16 @@ def parse_args(argv=None):
                        dest='method',
                        action="store_const",
                        help="Show event related images")
+    group.add_argument('-C', '--cargo', const="cargo",
+                       dest='method',
+                       action="store_const",
+                       help="Show current cargo and total hold space in Autosave")
 
     parser.add_argument(dest='entity',
                         choices=sorted(set(ENTITIES) | set(_[0] for _ in ENTITIES)),
                         metavar="ENTITY",
+                        default='event',
+                        nargs='?',
                         help="Entity to work on."
                             " Available entities: {}."
                             " [Default: %(default)s]".format(list(ENTITIES)))
@@ -275,6 +281,15 @@ def main(argv=None):
             safeprint(location.pretty())
         for event in ss.events.at(name="Pigmote Isle").find("rose"):
             safeprint(repr(event))
+        return
+
+    if args.method == 'cargo':
+        hold = ss.autosave.qualities.find('hold') or 0
+        if hold:
+            hold = hold[0].value + hold[0].modifier
+        else:
+            log.warning("No 'Hold' quality found in Autosave, maybe it is corrupt?")
+        print("Cargo in hold: {}/{}".format(ss.autosave.cargo, hold))
         return
 
     # General entities
@@ -2000,6 +2015,7 @@ class SaveQuality:
         self._data = data
         self.idx   = idx
         self.ss    = ss
+        self.save  = save
 
         # To make SaveQualities.get() work
         self.id  = self._data['AssociatedQualityId']
@@ -2057,6 +2073,15 @@ class SaveQuality:
     @property
     def status(self):
         return self.quality.status_for(self.value)
+
+    @property
+    def in_cargo(self):
+        if not self.quality.is_cargo or not self.save:
+            return False
+        for quality in self.save.qualities:
+            if quality.equipped == self.quality:
+                return False
+        return True
 
     @property
     def value(self):
@@ -2128,12 +2153,9 @@ class SaveQuality:
 class SaveQualities(Entities):
     EntityCls = SaveQuality
 
-    def __init__(self, *args, **kwargs):
-        self.save = kwargs.get('save', None)
-        super(SaveQualities, self).__init__(*args, **kwargs)
-
     def pretty(self):
         return "\n".join((_.pretty().strip() for _ in self))
+
 
 
 class Save:
@@ -2147,6 +2169,11 @@ class Save:
            ss=self.ss,
            save=self,
         )
+
+
+    @property
+    def cargo(self):
+        return sum(1 if _.in_cargo else 0 for _ in self.qualities)
 
 
     def dump(self):
