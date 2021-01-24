@@ -290,15 +290,7 @@ def main(argv=None):
 
     # General entities
     entities = (ss.autosave.qualities if args.entity == "autosave" else
-                getattr(ss, args.entity))
-    try:
-        # If args.filter is a valid integer, try finding entity by ID.
-        # If not a valid integer OR not found by ID, try finding by Name.
-        entities = entities.find_by_id(int(args.filter or ""))
-        if not entities:
-            raise ValueError
-    except ValueError:
-        entities = entities.find(args.filter)
+                getattr(ss, args.entity)).find(args.filter)
 
     if args.attribute:
         entities = entities.filter(*args.attribute)
@@ -1864,7 +1856,18 @@ class Entities:
         return self.__class__(path=self.path, ss=self.ss, entities=entities)
 
 
-    def find(self, name):
+    def find(self, query):
+        '''Return entities by ID or name'''
+        try:
+            entities = self.find_by_id(int(query or ""))
+            if not entities:
+                raise ValueError
+        except ValueError:
+            entities = self.find_by_name(query)
+        return entities
+
+
+    def find_by_name(self, name):
         '''Return Entities filtered by name, case-insensitive.
             If name is falsy, return all entities
         '''

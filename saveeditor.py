@@ -79,15 +79,7 @@ def main(argv=None):
 
     ss = sunlesssea.SunlessSea()
 
-    try:
-        # If args.quality is a valid integer, try finding quality by ID.
-        # If not a valid integer OR not found by ID, try finding by Name.
-        qualities = ss.autosave.qualities.find_by_id(int(args.quality))
-        if not qualities:
-            raise ValueError
-    except ValueError:
-        qualities = ss.autosave.qualities.find(args.quality)
-
+    qualities = ss.autosave.qualities.find(args.quality)
     found = len(qualities)
     if not found:
         log.error("Quality not found in Autosave: %s", args.quality)
