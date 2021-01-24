@@ -698,6 +698,10 @@ class Quality(Entity):
         return self.category == 106 or self.tag == "Officer"
 
     @property
+    def is_cargo(self):
+        return self.category == 200
+
+    @property
     def difficulty_factor(self):
         if not self.difficultyscaler:
             return 0
