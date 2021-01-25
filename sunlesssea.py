@@ -297,6 +297,9 @@ def main(argv=None):
         return
 
     if args.method == 'cargo':
+        for q in ss.autosave.qualities:
+            if q.in_cargo:
+                print(q)
         print("Cargo in hold: {}/{}".format(ss.autosave.cargo,
                                             ss.autosave.hold))
         return
@@ -2088,7 +2091,7 @@ class SaveQuality:
 
     @property
     def in_cargo(self):
-        if not self.quality.is_cargo or not self.save:
+        if not self.quality.is_cargo or not self.save or not self.value:
             return False
         for quality in self.save.qualities:
             if quality.equipped == self.quality:
@@ -2185,7 +2188,7 @@ class Save:
 
     @property
     def cargo(self):
-        return sum(1 if _.in_cargo else 0 for _ in self.qualities)
+        return sum(_.value if _.in_cargo else 0 for _ in self.qualities)
 
     @property
     def hold(self):
