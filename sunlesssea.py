@@ -500,7 +500,7 @@ class Entity:
             "=={name_wiki}==\n"
             "* <nowiki>{repr}</nowiki>\n"
             "* {wiki}\n",
-            self, entity=self, wiki=self.wiki(), repr=repr(self))
+            self, wiki=self.wiki(), repr=repr(self))
 
 
     def _pretty_text(self, text, cut=120, elipsis="(...)"):
@@ -2226,7 +2226,6 @@ class SaveQuality:
         return self.name or str(self.id)
 
     def wikirow(self):
-        #FIXME: idx should be from autosave, not quality
         return format_obj(
             "|-\n"
             "| {idx}\n"
@@ -2234,14 +2233,14 @@ class SaveQuality:
             "| [[{name_wiki}]]\n"
             "| {{{{game icon|{image}}}}}\n"
             "| {description_wiki}\n",
-            self.quality)
+            self.quality, idx=self.idx)
 
     def wikipage(self):
         return format_obj(
             "=={name}==\n"
             "* <nowiki>{repr}</nowiki>\n"
             "* {wiki}\n",
-            self, entity=self, wiki=self.wiki(), repr=repr(self))
+            self, name=self.name, wiki=self.wiki(), repr=repr(self))
 
     def __str__(self):
         capstr = iif(self.quality.cap, "/{}".format(self.quality.cap))
