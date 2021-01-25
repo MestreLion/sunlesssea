@@ -80,46 +80,62 @@ def main(argv=None):
 
     ss = sunlesssea.SunlessSea()
 
-    qualities = ss.autosave.qualities.find(args.quality)
-    found = len(qualities)
-    if args.quality and not found:
-        log.error("Quality not found in Autosave: %s", args.quality)
-        return ERR
+    if args.value:
+        change(ss, args.quality, args.value, args.add)
 
-    if args.value is None:
-        for q in sorted(qualities, key=lambda _: _.name.lower()):
+    else:
+        for q in sorted(find(ss, args.quality), key=lambda _: _.name.lower()):
             print(q)
         return
 
-    if found > 1:
-        log.error("Can not change value, %s qualities match '%s':",
-                  found, args.quality)
-        for q in qualities:
-            log.error("\t%s", q)
-        return ERR
-
-    quality = qualities[0]
-    log.debug(repr(quality))
-
-    value = args.value
-    if args.add:
-        value += quality.value
-
-    log.info("Changing quality [%s] '%s' from %s to %s",
-             quality.id, quality.name, quality.value, value)
-    quality.value = value
-
     if args.save:
-        log.debug(repr(quality))
         ss.autosave.save()
     else:
         log.info("Test run, not saving. Use --save to apply changes")
 
 
+def find(ss, query):
+    qualities = ss.autosave.qualities.find(query)
+    if query and not qualities:
+        raise sunlesssea.Error("Quality not found in Autosave: %s", query)
+    return qualities
+
+
+def change(ss, query, amount, add=False):
+    qualities = find(ss, query)
+    found = len(qualities)
+    if found > 1:
+        raise sunlesssea.Error(
+            "Can not change value, %s qualities match '%s':\n\t%s",
+            found, query, "\n\t".join(str(_) for _ in qualities)
+        )
+
+    quality = qualities[0]
+    log.debug(repr(quality))
+
+    value = amount
+    if add:
+        value += quality.value
+
+    log.info("Change quality [%s] '%s' from %s to %s (%+d)",
+             quality.id, quality.name, quality.value, value, value-quality.value)
+    quality.value = value
+
+
+def add_amount(ss, query, amount):
+    change(ss, query, amount, add=True)
+
+
+def set_amount(ss, query, amount):
+    change(ss, query, amount, add=False)
+
 
 if __name__ == '__main__':
     try:
         sys.exit(main(sys.argv[1:]))
+    except sunlesssea.Error as e:
+        log.error(e)
+        sys.exit(ERR)
     except Exception as e:
         log.critical(e, exc_info=True)
         sys.exit(1)

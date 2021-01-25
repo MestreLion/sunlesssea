@@ -150,6 +150,19 @@ def try_number(value):
             return value
 
 
+
+class Error(Exception):
+    """Base class for custom exceptions, with errno and %-formatting for args.
+
+    All modules in this package raise this (or a subclass) for all
+    explicitely raised, business-logic, expected or handled exceptions
+    """
+    def __init__(self, msg:str="", *args, errno:int=0):
+        super().__init__(str(msg) % args)
+        self.errno = errno
+
+
+
 ################################################################################
 # Main() and helpers
 
