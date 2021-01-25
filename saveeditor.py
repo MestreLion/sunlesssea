@@ -104,15 +104,17 @@ def find(query):
 
 
 def change(query, amount, add=False):
-    qualities = find(query)
-    found = len(qualities)
-    if found > 1:
-        raise sunlesssea.Error(
-            "Can not change value, %s qualities match '%s':\n\t%s",
-            found, query, "\n\t".join(str(_) for _ in qualities)
-        )
-
-    quality = qualities[0]
+    if not isinstance(query, sunlesssea.SaveQuality):
+        qualities = find(query)
+        found = len(qualities)
+        if found > 1:
+            raise sunlesssea.Error(
+                "Can not change value, %s qualities match '%s':\n\t%s",
+                found, query, "\n\t".join(str(_) for _ in qualities)
+            )
+        quality = qualities[0]
+    else:
+        quality = query
     log.debug(repr(quality))
 
     value = amount
