@@ -2040,6 +2040,27 @@ class Events(Entities):
 
 
 class SaveQuality:
+    TEMPLATE = {
+        "Name": None,
+        "EquippedPossession": None,
+        "Relationships": [],
+        "XP": 0,
+        "EffectiveLevelModifier": 0,
+        "TargetQuality": None,
+        "TargetLevel": None,
+        "CompletionMessage": None,
+        "Level": 0,
+        "AssociatedQuality": None,
+        "AssociatedQualityId": 0,
+        "QualityName": None,
+        "QualityDescription": None,
+        "QualityImage": None,
+        "QualityNature": None,
+        "QualityCategory": None,
+        "QualityAllowedOn": None,
+        "Id": 0
+    }
+
     def __init__(self, data=None, idx=0, save=None, ss=None):
         self._data = data
         self.idx   = idx
@@ -2082,6 +2103,15 @@ class SaveQuality:
                             self.name, qid)
 
         if TEST_INTEGRITY:
+            # Test if fixed keys match template
+            for k, v in self._data.items():
+                if k in ('AssociatedQualityId', 'Level', 'EquippedPossession',
+                         'EffectiveLevelModifier', 'XP', 'Namea'):
+                    continue
+                if v != self.TEMPLATE[k]:
+                    log.warning("%r[%s] does not match template, expected %r: %r",
+                                self, k, self.TEMPLATE[k], v)
+
             if self.equipped and not self.quality.isslot:
                 log.error("%r is not a slot but has a quality equipped: %r",
                           self, self.equipped)
