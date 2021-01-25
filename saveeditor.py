@@ -45,20 +45,27 @@ def parse_args(argv=None):
                        action="store_const",
                        help="Verbose mode, output extra info.")
 
-    parser.add_argument('-a', '--add',
-                        default=False,
-                        action="store_true",
-                        help="Add instead of setting VALUE to QUALITY.")
-
-    parser.add_argument('-N', '--naples',
-                        default=False,
-                        action="store_true",
-                        help="Apply changes and save.")
-
     parser.add_argument('-s', '--save',
                         default=False,
                         action="store_true",
                         help="Apply changes and save.")
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('-N', '--naples',
+                        default=False,
+                        action="store_true",
+                        help="Buy Fuel up to 21 and Supplies up to remaining Hold  "
+                        " as if in Naples (Surface), already accounting for trip back.")
+
+    group.add_argument('-A', '--antiquarian', '--alarming-scholar',
+                        default=False,
+                        action="store_true",
+                        help="Sell VALUE units of QUALITY to the Alarming Scholar.")
+
+    group.add_argument('-a', '--add',
+                        default=False,
+                        action="store_true",
+                        help="Consider VALUE as an increase to QUALITY.")
 
     parser.add_argument(nargs='?',
                         dest='quality',
@@ -87,6 +94,9 @@ def main(argv=None):
 
     if args.naples:
         naples()
+
+    if args.antiquarian:
+        antiquarian(args.quality, args.value)
 
     elif args.value:
         change(args.quality, args.value, args.add)
@@ -160,6 +170,27 @@ def naples():
     free -= add_cap('Fuel',     15, 21)
     free -= add_cap('Supplies', 5)
 
+
+def antiquarian(query, amount):
+    try:
+        event = ss.events.find('The Alarming Scholar')[0]
+    except IndexError:
+        raise sunlesssea.Error("Could not find the Alarming Scholar event!")
+    print(event.pretty())
+    for action in event.actions:
+        if not len(action.requirements) == 1:
+            continue
+        requirement = action.requirements[0]
+        if (   not len(requirement.operator) == 1
+            or not requirement.operator.get('MinLevel') == 1
+        ):
+            continue
+        quality = requirement.quality
+        for outcome in action.outcomes:
+            for effect in outcome.effects:
+                continue
+                effect.apply(ss.autosave)
+        print(quality)
 
 
 if __name__ == '__main__':

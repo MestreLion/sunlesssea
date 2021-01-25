@@ -1196,6 +1196,14 @@ class Effect(QualityOperator):
                           self.parent, self, ops)
 
 
+    #TODO!
+    def apply(self, save):
+        saveq = save.qualities.get(self.quality.id)
+        if not saveq:
+            raise Error("Quality not found in save: %s", self.quality.bare())
+        print(saveq)
+
+
 
 class Requirement(QualityOperator):
     # Order is important for ._format()!
