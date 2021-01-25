@@ -15,8 +15,6 @@ import sys
 
 import sunlesssea
 
-ERR = 3
-
 COPYRIGHT="""
 Copyright (C) 2020 Rodrigo Silva (MestreLion) <linux@rodrigosilva.com>
 License: GPLv3 or later, at your choice. See <http://www.gnu.org/licenses/gpl>
@@ -96,25 +94,25 @@ def main(argv=None):
         log.info("Test run, not saving. Use --save to apply changes")
 
 
-def find(query):
-    qualities = ss.autosave.qualities.find(query)
+def find(query, exact=False):
+    qualities = ss.autosave.qualities.find('^{}$'.format(query) if exact else query)
     if query and not qualities:
         raise sunlesssea.Error("Quality not found in Autosave: %s", query)
     return qualities
 
 
-def change(query, amount, add=False):
-    if not isinstance(query, sunlesssea.SaveQuality):
-        qualities = find(query)
-        found = len(qualities)
-        if found > 1:
-            raise sunlesssea.Error(
-                "Can not change value, %s qualities match '%s':\n\t%s",
-                found, query, "\n\t".join(str(_) for _ in qualities)
-            )
-        quality = qualities[0]
-    else:
-        quality = query
+def fetch(query, exact=True):
+    qualities = find(query, exact=exact)
+    found = len(qualities)
+    if found > 1:
+        raise sunlesssea.Error("%s qualities match '%s':\n\t%s",
+            found, query, "\n\t".join(str(_) for _ in qualities))
+    return qualities[0]
+
+
+def change(quality, amount, add=False):
+    if not isinstance(quality, sunlesssea.SaveQuality):
+        quality = fetch(quality, exact=False)
     log.debug(repr(quality))
 
     value = amount
@@ -141,7 +139,7 @@ if __name__ == '__main__':
         sys.exit(main(sys.argv[1:]))
     except sunlesssea.Error as e:
         log.error(e)
-        sys.exit(ERR)
+        sys.exit(3)
     except Exception as e:
         log.critical(e, exc_info=True)
         sys.exit(1)
