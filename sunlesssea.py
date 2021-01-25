@@ -613,7 +613,7 @@ class Quality(Entity):
 
         "ChangeDescriptionText",
         "LevelDescriptionText",
-        'LevelImageText',
+        "LevelImageText",
 
         "Cap",
         "Category",
@@ -623,8 +623,10 @@ class Quality(Entity):
         "Nature",
         "Persistent",
         "PluralName",
+        "PyramidNumberIncreaseLimit",
         "Tag",
-        'Visible',
+        "UsePyramidNumbers",
+        "Visible",
 
         'AssignToSlot',
         'Enhancements',
@@ -634,12 +636,10 @@ class Quality(Entity):
         'AllowedOn',
         'CssClasses',
         'Notes',
-        "Ordering",
+        'Ordering',
         'OwnerName',
-        'PyramidNumberIncreaseLimit',
         'QEffectPriority',
         'QualitiesPossessedList',
-        'UsePyramidNumbers',
         'VariableDescriptionText',  # Only on ID=126669, "{}" (string)
     ))
 
@@ -655,17 +655,19 @@ class Quality(Entity):
         super(Quality, self).__init__(data=data, idx=idx, ss=ss)
         # For scalar (atomic, non-mutable) values only!
         for attr, atype, default in (
-            ("AvailableAt",        str,  ""),
-            ("Cap",                int,  0),
-            ("Category",           int,  0),
-            ("DifficultyScaler",   int,  0),
-            ("DifficultyTestType", int,  0),
-            ("IsSlot",             bool, False),
-            ("Nature",             int,  0),
-            ("Persistent",         bool, False),
-            ("PluralName",         str,  ""),
-            ("Tag",                str,  ""),
-            ("Visible",            bool, False),
+            ("AvailableAt",                str,  ""),
+            ("Cap",                        int,  0),
+            ("Category",                   int,  0),
+            ("DifficultyScaler",           int,  0),
+            ("DifficultyTestType",         int,  0),
+            ("IsSlot",                     bool, False),
+            ("Nature",                     int,  0),
+            ("Persistent",                 bool, False),
+            ("PluralName",                 str,  ""),
+            ("PyramidNumberIncreaseLimit", int,  0),
+            ("Tag",                        str,  ""),
+            ("UsePyramidNumbers",          bool, False),
+            ("Visible",                    bool, False),
         ):
             setattr(self, attr.lower(), atype(self._data.get(attr, default)))
 
@@ -725,6 +727,7 @@ class Quality(Entity):
         if not self.difficultyscaler:
             return 0
         return 100.0 / self.difficultyscaler
+
 
     def challenge_cap(self, difficulty):
         if not(difficulty or self.difficultyscaler):
@@ -2035,18 +2038,17 @@ class SaveQuality:
         self.ss    = ss
         self.save  = save
 
-        # To make SaveQualities.get() work
-        self.id  = self._data['AssociatedQualityId']
-
+        # Find and assign the associated Quality
+        qid  = self._data['AssociatedQualityId']
         self.quality  = None
         if self.ss and self.ss.qualities:
-            self.quality = self.ss.qualities.get(self.id)
+            self.quality = self.ss.qualities.get(qid)
             if not self.quality:
                 # Create a dummy one
-                self.quality = Quality(data={'Id': self.id, 'Name':''},
+                self.quality = Quality(data={'Id': qid, 'Name':''},
                                        ss=self.ss)
                 log.warning("Could not find Quality for %r[%d]: %d",
-                            save, idx, self.id)
+                            save, idx, qid)
 
         # Modifier is a value added to (base) value
         # For example Engine Power and Stats enhancements
@@ -2084,6 +2086,11 @@ class SaveQuality:
 
 
     @property
+    def id(self):
+        # To make SaveQualities.get() work
+        return self.quality.id
+
+    @property
     def name(self):
         # To make SaveQualities.find() work
         return self.quality.name
@@ -2102,11 +2109,42 @@ class SaveQuality:
         return True
 
     @property
+    def pyramid_limit(self):
+        value = self.value
+        limit = self.quality.pyramidnumberincreaselimit or value
+        return min(value, limit)
+
+    @property
     def value(self):
         return self._data['Level']
     @value.setter
     def value(self, value):
-        self._data['Level'] = int(value)
+        value = int(value)
+        if self.quality.cap and value > self.quality.cap:
+            self._data['Level'] = self.quality.cap
+        else:
+            self._data['Level'] = value
+
+    @property
+    def xp(self):
+        return self._data.get('XP', 0)
+    @xp.setter
+    def xp(self, value):
+        self._data['XP'] = int(value)
+
+
+    def increment(self, value=1):
+        # Basic increment
+        if not self.quality.usepyramidnumbers:
+            self.value += value
+            return
+
+        # In practice, only used in 'Favours: Antiquarian' (Alarming Scholar)
+        for _ in range(value):
+            self.xp += 1
+            if self.xp > self.pyramid_limit:
+                self.value += 1
+                self.xp = 0
 
 
     def dump(self):
@@ -2143,12 +2181,15 @@ class SaveQuality:
             self, entity=self, wiki=self.wiki(), repr=repr(self))
 
     def __str__(self):
+        capstr = iif(self.quality.cap, "/{}".format(self.quality.cap))
+        xpstr = iif(self.quality.usepyramidnumbers, " ({} more to increase)".format(
+            self.pyramid_limit - self.xp + 1))
         statusstr = iif(self.status, " [{}]".format(self.status))
         modstr = iif(self.modifier, " + {} = {}".format(self.modifier,
                                                         self.value + self.modifier))
         equipstr = iif(self.quality.isslot, " [{}]".format(self.equipped or ""))
 
-        return ("{self.id}\t{self.quality} = {self.value}"
+        return ("{self.id}\t{self.quality} = {self.value}{capstr}{xpstr}"
                 "{statusstr}{modstr}{equipstr}".format(**locals()))
 
 
