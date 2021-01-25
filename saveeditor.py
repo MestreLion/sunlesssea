@@ -50,6 +50,11 @@ def parse_args(argv=None):
                         action="store_true",
                         help="Add instead of setting VALUE to QUALITY.")
 
+    parser.add_argument('-N', '--naples',
+                        default=False,
+                        action="store_true",
+                        help="Apply changes and save.")
+
     parser.add_argument('-s', '--save',
                         default=False,
                         action="store_true",
@@ -80,7 +85,10 @@ def main(argv=None):
 
     ss = sunlesssea.SunlessSea()
 
-    if args.value:
+    if args.naples:
+        naples()
+
+    elif args.value:
         change(args.quality, args.value, args.add)
 
     else:
@@ -113,7 +121,6 @@ def fetch(query, exact=True):
 def change(quality, amount, add=False):
     if not isinstance(quality, sunlesssea.SaveQuality):
         quality = fetch(quality, exact=False)
-    log.debug(repr(quality))
 
     value = amount
     if add:
@@ -131,6 +138,27 @@ def add_amount(query, amount):
 def set_amount(query, amount):
     change(query, amount, add=False)
 
+
+def naples():
+    free = ss.autosave.hold - ss.autosave.cargo
+    log.debug("Free cargo: %s", free)
+    if free <= 0:
+        raise sunlesssea.Error("Error in Autosave Cargo/Hold, possibly corrupt: %s/%s",
+                               ss.autosave.cargo, ss.autosave.hold)
+
+    def add_cap(name, price, cap=0):
+        quality = fetch(name)
+        value = quality.value
+        diff = min(max(value, cap or value + free) - value, free)
+        log.debug("%s + %s", quality, diff)
+        if diff:
+            add_amount(quality, diff)
+            add_amount('Echo', -(price * diff))
+        return diff
+
+    free += 12  # 11 fuel, 1 supplies
+    free -= add_cap('Fuel',     15, 21)
+    free -= add_cap('Supplies', 5)
 
 
 
