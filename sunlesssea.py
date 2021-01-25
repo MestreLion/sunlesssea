@@ -1666,10 +1666,8 @@ class Action(BaseEvent):
     def wikirow(self):
         outcomes = len(self.outcomes)
         rows = 2 * outcomes - (0 if self.canfail else 1)
-        rowspan = iif(rows > 1, '| rowspan="{}"              '.format(rows))
-
-        # save to avoid multiple calls to property
-        notes = filter(None, (_.gamenote for _ in (self, *self.outcomes)))
+        rowspan = iif(rows > 1, '| rowspan="{}"{}'.format(rows, ' ' * 14))
+        note = self.gamenote  # save to avoid multiple calls to property
 
         def innerheader(outcome):
             return ("| {{{{style inner header{rare} "
@@ -1708,7 +1706,7 @@ class Action(BaseEvent):
             name=self.name_wiki,
             description=iif(self.description, "{}\n".format(self.description_wiki)),
             reqs="<br>\n".join(_.wiki() for _ in self.requirements) or "-",
-            note='\n\n'.join(" {{{{game note|{}}}}}".format(_) for _ in notes),
+            note=iif(note, " {{{{game note|{}}}}}".format(note)),
             rowspan=rowspan,
             firstrow=firstrow,
         )
@@ -1788,7 +1786,12 @@ class Outcome(BaseEvent):
 
     @property
     def description_wiki(self):
-        return re.sub(self._re_gamenote, "", super().description_wiki).strip()
+        note = self.gamenote
+        if note:
+            return "{}\n\n{{{{game note|{}}}}}".format(
+                re.sub(self._re_gamenote, "", super().description_wiki).strip(),
+                note)
+        return super().description_wiki
 
 
     def pretty(self, short=False):
