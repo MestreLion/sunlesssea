@@ -2064,6 +2064,11 @@ class SaveQuality:
 
         # Equipped is the quality currently assigned to a slot
         # For Officers, Ship Equipment and Current Ship
+        # FIXME: this should actually be a SaveQuality, not a Quality!
+        # No need to post-process: data is fully dumped in the JSON,
+        # and there's no need to associate with the one from autosave.qualities
+        # But fix requires all code using .equipped to be (potentially) adapted
+        # as SaveQuality is NOT a Quality.
         self.equipped = None
         qid = (self._data['EquippedPossession'] or {}).get('AssociatedQualityId', 0)
         if qid and self.ss and self.ss.qualities:
@@ -2101,7 +2106,11 @@ class SaveQuality:
     @property
     def name(self):
         # To make SaveQualities.find() work
-        return self.quality.name
+        # Combines the Quality name with the SaveQuality name itself, if any
+        # Used to store the custom Ship Name
+        return ("{} ({})".format(self._data['Name'], self.quality.name)
+                if self._data['Name']
+                else self.quality.name)
 
     @property
     def status(self):
@@ -2197,7 +2206,7 @@ class SaveQuality:
                                                         self.value + self.modifier))
         equipstr = iif(self.quality.isslot, " [{}]".format(self.equipped or ""))
 
-        return ("{self.id}\t{self.quality} = {self.value}{capstr}{xpstr}"
+        return ("{self.id}\t{self.name} = {self.value}{capstr}{xpstr}"
                 "{statusstr}{modstr}{equipstr}".format(**locals()))
 
 
