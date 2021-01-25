@@ -23,6 +23,7 @@ License: GPLv3 or later, at your choice. See <http://www.gnu.org/licenses/gpl>
 """
 
 log = logging.getLogger(os.path.basename(os.path.splitext(__file__)[0]))
+ss = None
 
 
 def parse_args(argv=None):
@@ -73,6 +74,7 @@ def parse_args(argv=None):
 
 
 def main(argv=None):
+    global ss
     args = parse_args(argv)
     logging.basicConfig(level=args.loglevel,
                         format='%(levelname)-5.5s: %(message)s')
@@ -81,10 +83,10 @@ def main(argv=None):
     ss = sunlesssea.SunlessSea()
 
     if args.value:
-        change(ss, args.quality, args.value, args.add)
+        change(args.quality, args.value, args.add)
 
     else:
-        for q in sorted(find(ss, args.quality), key=lambda _: _.name.lower()):
+        for q in sorted(find(args.quality), key=lambda _: _.name.lower()):
             print(q)
         return
 
@@ -94,15 +96,15 @@ def main(argv=None):
         log.info("Test run, not saving. Use --save to apply changes")
 
 
-def find(ss, query):
+def find(query):
     qualities = ss.autosave.qualities.find(query)
     if query and not qualities:
         raise sunlesssea.Error("Quality not found in Autosave: %s", query)
     return qualities
 
 
-def change(ss, query, amount, add=False):
-    qualities = find(ss, query)
+def change(query, amount, add=False):
+    qualities = find(query)
     found = len(qualities)
     if found > 1:
         raise sunlesssea.Error(
@@ -122,12 +124,14 @@ def change(ss, query, amount, add=False):
     quality.value = value
 
 
-def add_amount(ss, query, amount):
-    change(ss, query, amount, add=True)
+def add_amount(query, amount):
+    change(query, amount, add=True)
 
 
-def set_amount(ss, query, amount):
-    change(ss, query, amount, add=False)
+def set_amount(query, amount):
+    change(query, amount, add=False)
+
+
 
 
 if __name__ == '__main__':
