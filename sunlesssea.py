@@ -1959,6 +1959,7 @@ class Entities:
     def add(self, entity, check=True):
         '''Add an Entity to the container.
             Use with caution, as Entities should remain as immutable as possible
+            It does NOT, for example, update any parent._data JSON
         '''
         if check and not isinstance(entity, self.EntityCls):
             raise ValueError("Must be instance of {} to add to {}, type {} found: {}"
@@ -2106,7 +2107,7 @@ class SaveQuality:
             # Test if fixed keys match template
             for k, v in self._data.items():
                 if k in ('AssociatedQualityId', 'Level', 'EquippedPossession',
-                         'EffectiveLevelModifier', 'XP', 'Namea'):
+                         'EffectiveLevelModifier', 'XP', 'Name'):
                     continue
                 if v != self.TEMPLATE[k]:
                     log.warning("%r[%s] does not match template, expected %r: %r",
@@ -2178,6 +2179,21 @@ class SaveQuality:
     @xp.setter
     def xp(self, value):
         self._data['XP'] = int(value)
+
+
+    @classmethod
+    def new(cls, qid, idx=0, save=None, ss=None, level=0, modifier=0, name=None):
+        # XP and EquippedPossession are is intentionally left out, for now.
+        data = cls.TEMPLATE.copy()
+        data.update({
+            "Name": name,
+            "EffectiveLevelModifier": modifier,
+            "Level": level,
+            "AssociatedQualityId": qid.id if isinstance(qid, Quality) else int(qid)
+        })
+        # It's tempting to add data to save._data here, but as this is a private
+        # attribute, let this to Save
+        return SaveQuality(data=data, idx=idx, save=save, ss=ss)
 
 
     def increment(self, value=1):
@@ -2289,6 +2305,21 @@ class Save:
         else:
             log.warning("No 'Hold' quality found in Autosave, maybe it is corrupt?")
         return hold
+
+
+    def add_quality(self, qid, level=0, modifier=0, name=None):
+        quality = SaveQuality.new(
+            qid      = qid,
+            idx      = len(self.qualities) + 1,
+            save     = self,
+            ss       = self.ss,
+            level    = level,
+            modifier = modifier,
+            name     = name
+        )
+        self._data['QualitiesPossessedList'].append(quality.dump())
+        self.qualities.add(quality)
+        return quality
 
 
     def dump(self):
