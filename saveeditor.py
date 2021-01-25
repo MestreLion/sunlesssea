@@ -56,7 +56,8 @@ def parse_args(argv=None):
                         action="store_true",
                         help="Apply changes and save.")
 
-    parser.add_argument(dest='quality',
+    parser.add_argument(nargs='?',
+                        dest='quality',
                         metavar="QUALITY",
                         help="Quality to look for, either by name or ID.")
 
@@ -81,12 +82,12 @@ def main(argv=None):
 
     qualities = ss.autosave.qualities.find(args.quality)
     found = len(qualities)
-    if not found:
+    if args.quality and not found:
         log.error("Quality not found in Autosave: %s", args.quality)
         return ERR
 
     if args.value is None:
-        for q in qualities:
+        for q in sorted(qualities, key=lambda _: _.name.lower()):
             print(q)
         return
 
