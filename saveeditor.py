@@ -224,10 +224,11 @@ def antiquarian(query, amount):
     for action in event.actions:
         if not squality.quality == trade_quality(action):
             continue
-        while action.check(ss.autosave) and (not amount or squality.value > amount):
+        for _ in range(amount or squality.value):
+            if not action.check(ss.autosave): break
             # FIXME: choose a single outcome!
             for outcome in action.outcomes:
-                outcome.apply(ss.autosave, amount or squality.value)
+                outcome.apply(ss.autosave)
 
 
 if __name__ == '__main__':

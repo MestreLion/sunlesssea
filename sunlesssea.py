@@ -1193,12 +1193,7 @@ class Effect(QualityOperator):
                           self.parent, self, ops)
 
 
-    def apply(self, save, factor:int=1):
-        if factor < 1:
-            raise Error("Factor must be an integer greater than zero: %s", factor)
-        if factor > 1 and (len(self.operator) > 1 or not self.operator.get('Level')):
-            log.warning("Applying a conditional or advanced effect in batch"
-                        " may have unexpected results: %s x %s", factor, self)
+    def apply(self, save):
         squality = save.qualities.get(self.quality.id)
         if not squality:
             squality = save.add_quality(self.quality)
@@ -1211,10 +1206,9 @@ class Effect(QualityOperator):
             elif op == 'OnlyIfNoMoreThan':
                 if squality.value > value: return
             elif op == 'SetToExactly': squality.value = value
-            elif op == 'Level':        squality.increment(value * factor)
+            elif op == 'Level':        squality.increment(value)
             else:
-                log.warning("Can not apply effect, operation not implemented: %s x %s",
-                            factor, self)
+                log.warning("Can not apply effect, operation not implemented: %s", self)
 
 
 
@@ -1242,18 +1236,13 @@ class Requirement(QualityOperator):
     ))
 
 
-    def check(self, save, factor=1):
-        if factor < 1:
-            raise Error("Factor must be an integer greater than zero: %s", factor)
-        if factor > 1 and (len(self.operator) > 1 or not self.operator.get('MinLevel')):
-            log.warning("Checking in batch for any requirement other than MinLevel"
-                        " may have unexpected results: %s x %s", factor, self)
+    def check(self, save):
         squality = save.qualities.get(self.quality.id) or SaveQuality.new(self.quality.id)
         for op, value in self.operator.items():
             if op not in self._OPS:
                 continue
             if   op == 'MinLevel':
-                if squality.value < value * factor: return False
+                if squality.value < value: return False
             elif op == 'MaxLevel':
                 if squality.value > value: return False
             else:
@@ -1430,7 +1419,7 @@ class BaseEvent(Entity):
                          parent.id, iid)
 
 
-    def _apply(self, save, factor=1):
+    def _apply(self, save):
         """Apply all effects to the save file qualities.
 
         Triggered Events, Exotic Effects and Move to Area are currently ignored.
@@ -1439,7 +1428,7 @@ class BaseEvent(Entity):
             raise NotImplementedError("{} has no effects to apply".format(
                                       self.__class__.__name__))
         for effect in self.effects:
-            effect.apply(save, factor)
+            effect.apply(save)
         for attr in ('trigger', 'exoticeffects', 'movetoarea'):
             attrval = getattr(self, attr, None)
             if attrval:
