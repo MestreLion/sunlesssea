@@ -1201,10 +1201,10 @@ class Effect(QualityOperator):
             if op not in self.operator:
                 continue
             value = self.operator[op]
-            if ((op == 'OnlyIfAtLeast'    and squality.value < value) or
-                (op == 'OnlyIfNoMoreThan' and squality.value > value)
-            ):
-                return
+            if   op == 'OnlyIfAtLeast':
+                if squality.value < value: return
+            elif op == 'OnlyIfNoMoreThan':
+                if squality.value > value: return
             elif op == 'SetToExactly': squality.value = value
             elif op == 'Level':        squality.increment(value)
             else:
