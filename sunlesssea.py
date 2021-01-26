@@ -1193,10 +1193,15 @@ class Effect(QualityOperator):
                           self.parent, self, ops)
 
 
-    def apply(self, save):
+    def apply(self, save, factor:int=1):
         squality = save.qualities.get(self.quality.id)
         if not squality:
             squality = save.add_quality(self.quality)
+        if factor < 1:
+            raise Error("Factor must be a positive integer: %s", factor)
+        if factor > 1 and (len(self.operator) > 1 or not self.operator.get('Level')):
+            log.warning("Applying conditional or advanced effects in batch"
+                        " may have unexpected results: %s x %s", factor, self)
         for op in reversed(self._OPS):
             if op not in self.operator:
                 continue
@@ -1206,9 +1211,10 @@ class Effect(QualityOperator):
             elif op == 'OnlyIfNoMoreThan':
                 if squality.value > value: return
             elif op == 'SetToExactly': squality.value = value
-            elif op == 'Level':        squality.increment(value)
+            elif op == 'Level':        squality.increment(value * factor)
             else:
-                log.warning("Can not apply, not implemented: %r", self)
+                log.warning("Can not apply effect, operation not implemented: %s x %s",
+                            factor, self)
 
 
 
@@ -1419,7 +1425,7 @@ class BaseEvent(Entity):
                          parent.id, iid)
 
 
-    def _apply(self, save):
+    def _apply(self, save, factor=1):
         """Apply all effects to the save file qualities.
 
         Triggered Events, Exotic Effects and Move to Area are currently ignored.
@@ -1428,7 +1434,7 @@ class BaseEvent(Entity):
             raise NotImplementedError("{} has no effects to apply".format(
                                       self.__class__.__name__))
         for effect in self.effects:
-            effect.apply(save)
+            effect.apply(save, factor)
         for attr in ('trigger', 'exoticeffects', 'movetoarea'):
             attrval = getattr(self, attr, None)
             if attrval:

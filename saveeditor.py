@@ -227,7 +227,7 @@ def antiquarian(query, amount):
         while action.check(ss.autosave) and (not amount or squality.value > amount):
             # FIXME: choose a single outcome!
             for outcome in action.outcomes:
-                outcome.apply(ss.autosave)
+                outcome.apply(ss.autosave, amount or squality.value)
 
 
 if __name__ == '__main__':
