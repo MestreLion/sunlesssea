@@ -180,19 +180,24 @@ def antiquarian(query, amount):
         raise sunlesssea.Error("Could not find the Alarming Scholar event!")
     print(event.pretty())
 
-    def is_trade(action):
+    if not query:
+        raise sunlesssea.Error("QUALITY is required for --antiquarian")
+
+    squality = fetch(query, exact=False)
+
+    def trade_quality(action):
         """Trade action is defined by having all of:
             - A single requirement, in the strict form of 'quality >= 1'
             - All outcomes contain one effect 'echo += X' and one 'quality -= 1'
               (it may contain additional effects)
         """
         if not len(action.requirements) == 1:
-            return False
+            return
         requirement = action.requirements[0]
         if (   not len(requirement.operator) == 1
             or not requirement.operator.get('MinLevel') == 1
         ):
-            return False
+            return
         quality = requirement.quality
         echo = fetch('Echo', entities=ss.qualities)
         for outcome in action.outcomes:
@@ -213,13 +218,14 @@ def antiquarian(query, amount):
                     eok = True
                     continue
             if not (qok and eok):
-                return False
-        return True
+                return
+        return quality
 
     for action in event.actions:
-        if not is_trade(action):
+        if not squality.quality == trade_quality(action):
             continue
-        while action.check(ss.autosave):
+        while action.check(ss.autosave) and (not amount or squality.value > amount):
+            # FIXME: choose a single outcome!
             for outcome in action.outcomes:
                 outcome.apply(ss.autosave)
 
