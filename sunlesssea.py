@@ -1719,6 +1719,48 @@ class Action(BaseEvent):
     def description_wiki(self):
         return re.sub(self._re_gamenote, "", super().description_wiki).strip()
 
+    @property
+    def quality_sold(self):
+        """Return the quality being sold by this action, if any, or None.
+
+        A selling action is defined by having all of:
+        - A single requirement, in the strict form of 'quality >= 1'
+        - All outcomes contain one effect 'echo += X' and one 'quality -= 1'
+         (it may contain additional effects)
+        """
+        if not self.ss:
+            raise Error("Missing SunlessSea reference required for .quality_sold(): %r",
+                        self)
+        if not len(self.requirements) == 1:
+            return
+        requirement = self.requirements[0]
+        if (   not len(requirement.operator) == 1
+            or not requirement.operator.get('MinLevel') == 1
+        ):
+            return
+        quality = requirement.quality
+        echo = self.ss.qualities.fetch('Echo')
+        for outcome in self.outcomes:
+            qok = eok = False
+            for effect in outcome.effects:
+                if (
+                    effect.quality == quality and
+                    len(effect.operator) == 1 and
+                    effect.operator.get('Level') == -1
+                ):
+                    qok = True
+                    continue
+                if (
+                    effect.quality ==  echo and
+                    len(effect.operator) == 1 and
+                    effect.operator.get('Level') > 0
+                ):
+                    eok = True
+                    continue
+            if not (qok and eok):
+                return
+        return quality
+
 
     check = BaseEvent._check
 
@@ -1946,6 +1988,18 @@ class Entities:
         """Select entities where entity.attr = value"""
         entities=(_ for _ in self if str(getattr(_, attr, "")) == str(value))
         return self.__class__(path=self.path, ss=self.ss, entities=entities)
+
+
+    def fetch(self, query, partial=False):
+        """Find a single entity, raise Error if none or multiple found"""
+        entities = self.find(query, partial=partial)
+        found = len(entities)
+        if not found:
+            raise Error("No %s matching %r", self.EntityCls.__name__, query)
+        if found > 1:
+            raise Error("%s match '%s':\n\t%s",
+                        self, query, "\n\t".join(str(_) for _ in self))
+        return entities[0]
 
 
     def find(self, query, partial=True):

@@ -95,14 +95,14 @@ def main(argv=None):
     if args.naples:
         naples()
 
-    if args.antiquarian:
+    elif args.antiquarian:
         antiquarian(args.quality, args.value)
 
     elif args.value:
         change(args.quality, args.value, args.add)
 
     else:
-        for q in sorted(find(args.quality), key=lambda _: _.name.lower()):
+        for q in sorted(ss.autosave.qualities.find(args.quality), key=lambda _: _.name.lower()):
             print(q)
         return
 
@@ -112,27 +112,9 @@ def main(argv=None):
         log.info("Test run, not saving. Use --save to apply changes")
 
 
-def find(query, exact=False, entities=None):
-    if entities is None:
-        entities = ss.autosave.qualities
-    qualities = entities.find('^{}$'.format(query) if exact else query)
-    if query and not qualities:
-        raise sunlesssea.Error("Quality not found in %s: %s", entities, query)
-    return qualities
-
-
-def fetch(query, exact=True, entities=None):
-    qualities = find(query, exact=exact, entities=entities)
-    found = len(qualities)
-    if found > 1:
-        raise sunlesssea.Error("%s qualities match '%s':\n\t%s",
-            found, query, "\n\t".join(str(_) for _ in qualities))
-    return qualities[0]
-
-
 def change(quality, amount, add=False):
     if not isinstance(quality, sunlesssea.SaveQuality):
-        quality = fetch(quality, exact=False)
+        quality = ss.autosave.qualities.fetch(quality, partial=True)
 
     value = amount
     if add:
@@ -159,7 +141,7 @@ def naples():
                                ss.autosave.cargo, ss.autosave.hold)
 
     def add_cap(name, price, cap=0):
-        quality = fetch(name)
+        quality = ss.autosave.qualities.fetch(name)
         value = quality.value
         diff = min(max(value, cap or value + free) - value, free)
         log.debug("%s + %s", quality, diff)
@@ -174,55 +156,16 @@ def naples():
 
 
 def antiquarian(query, amount):
-    try:
-        event = ss.events.find('The Alarming Scholar')[0]
-    except IndexError:
-        raise sunlesssea.Error("Could not find the Alarming Scholar event!")
+    event = ss.events.fetch('The Alarming Scholar')
     print(event.pretty())
 
     if not query:
         raise sunlesssea.Error("QUALITY is required for --antiquarian")
 
-    squality = fetch(query, exact=False)
-
-    def trade_quality(action):
-        """Trade action is defined by having all of:
-            - A single requirement, in the strict form of 'quality >= 1'
-            - All outcomes contain one effect 'echo += X' and one 'quality -= 1'
-              (it may contain additional effects)
-        """
-        if not len(action.requirements) == 1:
-            return
-        requirement = action.requirements[0]
-        if (   not len(requirement.operator) == 1
-            or not requirement.operator.get('MinLevel') == 1
-        ):
-            return
-        quality = requirement.quality
-        echo = fetch('Echo', entities=ss.qualities)
-        for outcome in action.outcomes:
-            qok = eok = False
-            for effect in outcome.effects:
-                if (
-                    effect.quality == quality and
-                    len(effect.operator) == 1 and
-                    effect.operator.get('Level') == -1
-                ):
-                    qok = True
-                    continue
-                if (
-                    effect.quality ==  echo and
-                    len(effect.operator) == 1 and
-                    effect.operator.get('Level') > 0
-                ):
-                    eok = True
-                    continue
-            if not (qok and eok):
-                return
-        return quality
+    squality = ss.autosave.qualities.fetch(query, partial=True)
 
     for action in event.actions:
-        if not squality.quality == trade_quality(action):
+        if not squality.quality == action.quality_sold:
             continue
         for _ in range(amount or squality.value):
             if not action.check(ss.autosave): break
