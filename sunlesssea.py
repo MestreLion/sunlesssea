@@ -990,16 +990,15 @@ class QualityOperator(Entity):
     # Order IS relevant, hence a tuple
     _OPS = ()
 
-    _NOT_OP  = set(('AssociatedQuality', 'Id'))
-    _HIDE_OP = set(('VisibleWhenRequirementFailed',
-                    'BranchVisibleWhenRequirementFailed',
-                    'Priority',
-                    'ForceEquip'))
-
     # To satisfy Entity base class
-    _REQUIRED_FIELDS = {"AssociatedQuality"}
-    _OPTIONAL_FIELDS = set()
-    _IGNORED_FIELDS  = _HIDE_OP
+    _REQUIRED_FIELDS = {'AssociatedQuality'}
+    _OPTIONAL_FIELDS = {'Id'}
+    _IGNORED_FIELDS  = {
+        'VisibleWhenRequirementFailed',
+        'BranchVisibleWhenRequirementFailed',
+        'Priority',
+        'ForceEquip',
+    }
 
     _reverse = (r'Terror$', r'Hunger$', r'Menaces:')
 
@@ -1010,7 +1009,7 @@ class QualityOperator(Entity):
         self.parent   = parent
         self.quality  = None
         self.operator = {_:data[_] for _ in data
-                         if _ not in self._NOT_OP}
+                         if _ in self._OPS}
 
         qid = self._data['AssociatedQuality']['Id']
         if self.ss and self.ss.qualities:
@@ -1025,8 +1024,7 @@ class QualityOperator(Entity):
 
         # Integrity check
         if TEST_INTEGRITY:
-            ops = set(self.operator) - self._HIDE_OP
-            if not ops:
+            if not self.operator:
                 log.error("No relevant operators in %r.%r",
                          self.parent, self)
 
@@ -1076,9 +1074,7 @@ class QualityOperator(Entity):
                                          if adv else value),
                                         *args, **kwargs))
 
-        ops = {_:self.operator[_]
-               for _ in self.operator
-               if _ not in self._HIDE_OP}
+        ops = self.operator.copy()
         posopstrs = []
         qtyopstrs = []
         ifopstrs  = []
@@ -1173,6 +1169,7 @@ class QualityOperator(Entity):
 
 
 class Effect(QualityOperator):
+    # Order is important for both ._format() and .apply()!
     _OPS = (
         'Level',
         'ChangeByAdvanced',
@@ -1189,8 +1186,8 @@ class Effect(QualityOperator):
 
         # Integrity check
         if TEST_INTEGRITY:
-            ops = set(self.operator) - self._HIDE_OP - set(('OnlyIfAtLeast',
-                                                            'OnlyIfNoMoreThan'))
+            ops = set(self.operator) - set(('OnlyIfAtLeast',
+                                            'OnlyIfNoMoreThan'))
             if len(ops) > 1:
                 log.error("Mutually exclusive operators in %r.%r: %s",
                           self.parent, self, ops)
@@ -1240,7 +1237,7 @@ class Requirement(QualityOperator):
 
     def _tokenize(self):
         # Create a copy of operators, filtering out irrelevant ones
-        ops = {_:self.operator[_] for _ in self._OPS if _ in self.operator}
+        ops = self.operator.copy()
         tokens = []
 
         def tokenize(optype, *args, **kwargs):
