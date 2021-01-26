@@ -1419,6 +1419,34 @@ class BaseEvent(Entity):
                          parent.id, iid)
 
 
+    def _apply(self, save):
+        """Apply all effects to the save file qualities.
+
+        Triggered Events, Exotic Effects and Move to Area are currently ignored.
+        """
+        if not hasattr(self, 'effects'):
+            raise NotImplementedError("{} has no effects to apply".format(
+                                      self.__class__.__name__))
+        for effect in self.effects:
+            effect.apply(save)
+        for attr in ('trigger', 'exoticeffects', 'movetoarea'):
+            attrval = getattr(self, attr, None)
+            if attrval:
+                continue  # Temporarily disable the warning below, too chatty
+                log.warning("Can not apply %r, not implemented: %r",
+                            attr.title(), attrval)
+
+    def _check(self, save):
+        """Check all requirements against the save file qualities."""
+        if not hasattr(self, 'requirements'):
+            raise NotImplementedError("{} has no requirements to check".format(
+                                      self.__class__.__name__))
+        for requirement in self.requirements:
+            if not requirement.check(save):
+                return False
+        return True
+
+
     def pretty(self, location=None, short=False):
         pretty = super(BaseEvent, self).pretty(short=short)
 
@@ -1521,6 +1549,10 @@ class Event(BaseEvent):
     @property
     def image_wiki_file(self):
         return "File:SS {}gaz.png".format(self.image or "")
+
+
+    apply = BaseEvent._apply
+    check = BaseEvent._check
 
 
     def pretty(self, short=False):
@@ -1688,6 +1720,9 @@ class Action(BaseEvent):
         return re.sub(self._re_gamenote, "", super().description_wiki).strip()
 
 
+    check = BaseEvent._check
+
+
     def pretty(self):
         pretty = super(Action, self).pretty().strip()
 
@@ -1828,19 +1863,7 @@ class Outcome(BaseEvent):
         return super().description_wiki
 
 
-    def apply(self, save):
-        """Apply all effects to the save file.
-
-        Triggered Events, Exotic Effects and Move to Area are currently ignored.
-        """
-        for effect in self.effects:
-            effect.apply(save)
-        for attr in ('trigger', 'exoticeffects', 'movetoarea'):
-            attrval = getattr(self, attr, None)
-            if attrval:
-                continue  # Temporarily disable the warning below, too chatty
-                log.warning("Can not apply %r, not implemented: %r",
-                            attr.title(), attrval)
+    apply = BaseEvent._apply
 
 
     def pretty(self, short=False):
