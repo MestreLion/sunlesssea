@@ -1721,45 +1721,39 @@ class Action(BaseEvent):
 
     @property
     def quality_sold(self):
-        """Return the quality being sold by this action, if any, or None.
+        """Return the quality you sell through this action, if any, or None.
 
         A selling action is defined by having all of:
-        - A single requirement, in the strict form of 'quality >= 1'
+        - A single requirement, in the strict form of 'quality >= 1', and quality not Echo
         - All outcomes contain one effect 'echo += X' and one 'quality -= 1'
          (it may contain additional effects)
         """
         if not self.ss:
             raise Error("Missing SunlessSea reference required for .quality_sold(): %r",
                         self)
+        # Structure check
         if not len(self.requirements) == 1:
             return
+        echo = self.ss.qualities.fetch('Echo')
         requirement = self.requirements[0]
-        if (   not len(requirement.operator) == 1
-            or not requirement.operator.get('MinLevel') == 1
+        quality = requirement.quality
+        # Requirement check
+        if not (    quality != echo
+                and len(requirement.operator) == 1
+                and requirement.operator.get('MinLevel') == 1  # amount = 1
         ):
             return
-        quality = requirement.quality
-        echo = self.ss.qualities.fetch('Echo')
+        # Outcomes and effects check
         for outcome in self.outcomes:
             qok = eok = False
             for effect in outcome.effects:
-                if (
-                    effect.quality == quality and
-                    len(effect.operator) == 1 and
-                    effect.operator.get('Level') == -1
-                ):
-                    qok = True
-                    continue
-                if (
-                    effect.quality ==  echo and
-                    len(effect.operator) == 1 and
-                    effect.operator.get('Level') > 0
-                ):
-                    eok = True
-                    continue
+                if not (len(effect.operator) == 1 and 'Level' in effect.operator): continue
+                value = effect.operator['Level']
+                if   (effect.quality == quality and value == -1): qok = True  # == -amount
+                elif (effect.quality == echo    and value >   0): eok = True  # price = value
             if not (qok and eok):
                 return
-        return quality
+        return quality  #, price, amount
 
 
     check = BaseEvent._check
