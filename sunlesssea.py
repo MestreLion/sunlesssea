@@ -1992,7 +1992,7 @@ class Entities:
             raise Error("No %s matching %r", self.EntityCls.__name__, query)
         if found > 1:
             raise Error("%s match '%s':\n\t%s",
-                        self, query, "\n\t".join(str(_) for _ in self))
+                        entities, query, "\n\t".join(str(_) for _ in entities))
         return entities[0]
 
 
