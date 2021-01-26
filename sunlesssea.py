@@ -1805,6 +1805,17 @@ class Action(BaseEvent):
     check = BaseEvent._check
 
 
+    def do(self, save, repeats=1):
+        counter = 0
+        for _ in range(repeats):
+            if not self.check(save): break
+            # FIXME: choose a single outcome!
+            for outcome in self.outcomes:
+                outcome.apply(save)
+            counter += 1
+        return counter
+
+
     def pretty(self):
         pretty = super(Action, self).pretty().strip()
 
