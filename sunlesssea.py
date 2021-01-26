@@ -2339,7 +2339,8 @@ class SaveQuality:
         if self.quality.cap and value > self.quality.cap:
             value = self.quality.cap
         if value < 0:
-            log.warning("Setting %r to a negative value, ignoring: %r", self, value)
+            # Silently ignore, like the games does with, for example, Terror
+            # log.warning("Setting %r to a negative value, ignoring: %r", self, value)
             return
         log.debug("%r => %r", self, value)
         self._data['Level'] = value
