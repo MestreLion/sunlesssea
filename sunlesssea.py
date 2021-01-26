@@ -1720,6 +1720,50 @@ class Action(BaseEvent):
         return re.sub(self._re_gamenote, "", super().description_wiki).strip()
 
     @property
+    def quality_bought(self):
+        """Return the quality you buy through this action, if any, or None.
+
+        A buying action is defined by having all of:
+        - A single outcome containing 2 effects, 'quality += 1' and 'echo -= X'
+        - Additional effects, if any, must be to Terror or Fragment
+        - A requirement in the strict form of 'echo >= X'.
+          (it may contain additional requirements)
+        """
+        if not self.ss:
+            raise Error("Missing SunlessSea reference required for .quality_sold(): %r",
+                        self)
+        # Structure check: at least 1 requirement, 1 outcome with at least 2 effects
+        if not (    self.requirements
+                and len(self.outcomes) == 1
+                and len(self.outcomes[0].effects) >= 2
+        ):
+            return
+        price = 0
+        quality = None
+        echo = self.ss.qualities.fetch('Echo')
+        # Effects check:
+        # Both quality and echo must have a single 'Level' operator
+        # Quality effect is increment by 1, Echo effect is decrement by price
+        for effect in self.outcomes[0].effects:
+            if not (len(effect.operator) == 1 and 'Level' in effect.operator): break
+            value = effect.operator['Level']
+            if   (effect.quality != echo and value == +1): quality = effect.quality
+            elif (effect.quality == echo and value <   0): price   = -value
+            elif (effect.quality.name not in ('Terror', 'Fragment')): break
+        if not (quality and price):
+            return
+        # Requirements check: find one 'Echo >= price'
+        for requirement in self.requirements:
+            if (    requirement.quality == echo
+                and len(requirement.operator) == 1
+                and requirement.operator.get('MinLevel') == price
+            ):
+                break
+        else:
+            return
+        return quality  #, price, amount
+
+    @property
     def quality_sold(self):
         """Return the quality you sell through this action, if any, or None.
 
