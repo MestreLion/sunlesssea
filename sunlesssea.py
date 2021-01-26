@@ -1943,28 +1943,35 @@ class Entities:
 
 
     def filter(self, attr, value):
+        """Select entities where entity.attr = value"""
         entities=(_ for _ in self if str(getattr(_, attr, "")) == str(value))
         return self.__class__(path=self.path, ss=self.ss, entities=entities)
 
 
-    def find(self, query):
-        '''Return entities by ID or name'''
+    def find(self, query, partial=True):
+        """Return entities matching by ID or name"""
         try:
             entities = self.find_by_id(int(query or ""))
             if not entities:
                 raise ValueError
         except ValueError:
-            entities = self.find_by_name(query)
+            entities = self.find_by_name(query, partial=partial)
         return entities
 
 
-    def find_by_name(self, name):
-        '''Return Entities filtered by name, case-insensitive.
-            If name is falsy, return all entities
-        '''
+    def find_by_name(self, name, partial=True):
+        """Return Entities matching name, case-insensitive.
+
+        If name is falsy, return all entities.
+        """
         if not name:
             return self
-        entities=(_ for _ in self if re.search(name, _.name, re.IGNORECASE))
+        if partial:
+            def search(x, s): return x.lower() in s.lower()
+        else:
+            def search(x, s): return x.lower() == s.lower()
+        # An idea: elif regex: def search(x, s): return re.search(x, s, re.IGNORECASE)
+        entities=(_ for _ in self if search(name, _.name))
         return self.__class__(path=self.path, ss=self.ss, entities=entities)
 
 
@@ -2051,6 +2058,12 @@ class Entities:
 
 
     def __str__(self):
+        length = len(self)
+        name = (self.EntityCls if length == 1 else self.__class__).__name__.lower()
+        return "{} {}".format(length, name)
+
+
+    def __repr__(self):
         return "<{}: {:d}>".format(self.__class__.__name__,
                                    len(self._entities))
 
