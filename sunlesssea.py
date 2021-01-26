@@ -1235,6 +1235,22 @@ class Requirement(QualityOperator):
         'INVALID',
     ))
 
+
+    def check(self, save):
+        squality = save.qualities.get(self.quality.id) or SaveQuality.new(self.quality.id)
+        for op, value in self.operator.items():
+            if op not in self._OPS:
+                continue
+            if   op == 'MinLevel':
+                if squality.value < value: return False
+            elif op == 'MaxLevel':
+                if squality.value > value: return False
+            else:
+                log.warning("Can not check, not implemented: %r", self)
+                return False
+        return True
+
+
     def _tokenize(self):
         # Create a copy of operators, filtering out irrelevant ones
         ops = self.operator.copy()
