@@ -187,9 +187,7 @@ def antiquarian(query, amount):
             continue
         quality = requirement.quality
         for outcome in action.outcomes:
-            for effect in outcome.effects:
-                continue
-                effect.apply(ss.autosave)
+            outcome.apply(ss.autosave)
         print(quality)
 
 

@@ -1196,12 +1196,22 @@ class Effect(QualityOperator):
                           self.parent, self, ops)
 
 
-    #TODO!
     def apply(self, save):
-        saveq = save.qualities.get(self.quality.id)
-        if not saveq:
-            raise Error("Quality not found in save: %s", self.quality.bare())
-        print(saveq)
+        squality = save.qualities.get(self.quality.id)
+        if not squality:
+            squality = save.add_quality(self.quality)
+        for op in reversed(self._OPS):
+            if op not in self.operator:
+                continue
+            value = self.operator[op]
+            if ((op == 'OnlyIfAtLeast'    and squality.value < value) or
+                (op == 'OnlyIfNoMoreThan' and squality.value > value)
+            ):
+                return
+            elif op == 'SetToExactly': squality.value = value
+            elif op == 'Level':        squality.increment(value)
+            else:
+                log.warning("Can not apply, not implemented: %r", self)
 
 
 
@@ -1805,6 +1815,21 @@ class Outcome(BaseEvent):
         return super().description_wiki
 
 
+    def apply(self, save):
+        """Apply all effects to the save file.
+
+        Triggered Events, Exotic Effects and Move to Area are currently ignored.
+        """
+        for effect in self.effects:
+            effect.apply(save)
+        for attr in ('trigger', 'exoticeffects', 'movetoarea'):
+            attrval = getattr(self, attr, None)
+            if attrval:
+                continue  # Temporarily disable the warning below, too chatty
+                log.warning("Can not apply %r, not implemented: %r",
+                            attr.title(), attrval)
+
+
     def pretty(self, short=False):
         out = ["{} outcome{}:".format(self.label,
             iif(self.chance, " ({}% chance)".format(self.chance)))
@@ -2169,9 +2194,12 @@ class SaveQuality:
     def value(self, value):
         value = int(value)
         if self.quality.cap and value > self.quality.cap:
-            self._data['Level'] = self.quality.cap
-        else:
-            self._data['Level'] = value
+            value = self.quality.cap
+        if value < 0:
+            log.warning("Setting %r to a negative value, ignoring: %r", self, value)
+            return
+        log.debug("%r => %r", self, value)
+        self._data['Level'] = value
 
     @property
     def xp(self):
@@ -2318,6 +2346,7 @@ class Save:
         )
         self._data['QualitiesPossessedList'].append(quality.dump())
         self.qualities.add(quality)
+        log.debug("Created new Quality in Save: %r", quality)
         return quality
 
 
