@@ -112,15 +112,17 @@ def main(argv=None):
         log.info("Test run, not saving. Use --save to apply changes")
 
 
-def find(query, exact=False):
-    qualities = ss.autosave.qualities.find('^{}$'.format(query) if exact else query)
+def find(query, exact=False, entities=None):
+    if entities is None:
+        entities = ss.autosave.qualities
+    qualities = entities.find('^{}$'.format(query) if exact else query)
     if query and not qualities:
-        raise sunlesssea.Error("Quality not found in Autosave: %s", query)
+        raise sunlesssea.Error("Quality not found in %s: %s", entities, query)
     return qualities
 
 
-def fetch(query, exact=True):
-    qualities = find(query, exact=exact)
+def fetch(query, exact=True, entities=None):
+    qualities = find(query, exact=exact, entities=entities)
     found = len(qualities)
     if found > 1:
         raise sunlesssea.Error("%s qualities match '%s':\n\t%s",
@@ -177,18 +179,49 @@ def antiquarian(query, amount):
     except IndexError:
         raise sunlesssea.Error("Could not find the Alarming Scholar event!")
     print(event.pretty())
-    for action in event.actions:
+
+    def is_trade(action):
+        """Trade action is defined by having all of:
+            - A single requirement, in the strict form of 'quality >= 1'
+            - All outcomes contain one effect 'echo += X' and one 'quality -= 1'
+              (it may contain additional effects)
+        """
         if not len(action.requirements) == 1:
-            continue
+            return False
         requirement = action.requirements[0]
         if (   not len(requirement.operator) == 1
             or not requirement.operator.get('MinLevel') == 1
         ):
-            continue
+            return False
         quality = requirement.quality
+        echo = fetch('Echo', entities=ss.qualities)
         for outcome in action.outcomes:
-            outcome.apply(ss.autosave)
-        print(quality)
+            qok = eok = False
+            for effect in outcome.effects:
+                if (
+                    effect.quality == quality and
+                    len(effect.operator) == 1 and
+                    effect.operator.get('Level') == -1
+                ):
+                    qok = True
+                    continue
+                if (
+                    effect.quality ==  echo and
+                    len(effect.operator) == 1 and
+                    effect.operator.get('Level') > 0
+                ):
+                    eok = True
+                    continue
+            if not (qok and eok):
+                return False
+        return True
+
+    for action in event.actions:
+        if not is_trade(action):
+            continue
+        while action.check(ss.autosave):
+            for outcome in action.outcomes:
+                outcome.apply(ss.autosave)
 
 
 if __name__ == '__main__':
