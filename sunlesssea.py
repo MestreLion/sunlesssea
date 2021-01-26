@@ -1194,14 +1194,14 @@ class Effect(QualityOperator):
 
 
     def apply(self, save, factor:int=1):
+        if factor < 1:
+            raise Error("Factor must be an integer greater than zero: %s", factor)
+        if factor > 1 and (len(self.operator) > 1 or not self.operator.get('Level')):
+            log.warning("Applying a conditional or advanced effect in batch"
+                        " may have unexpected results: %s x %s", factor, self)
         squality = save.qualities.get(self.quality.id)
         if not squality:
             squality = save.add_quality(self.quality)
-        if factor < 1:
-            raise Error("Factor must be a positive integer: %s", factor)
-        if factor > 1 and (len(self.operator) > 1 or not self.operator.get('Level')):
-            log.warning("Applying conditional or advanced effects in batch"
-                        " may have unexpected results: %s x %s", factor, self)
         for op in reversed(self._OPS):
             if op not in self.operator:
                 continue
@@ -1242,17 +1242,22 @@ class Requirement(QualityOperator):
     ))
 
 
-    def check(self, save):
+    def check(self, save, factor=1):
+        if factor < 1:
+            raise Error("Factor must be an integer greater than zero: %s", factor)
+        if factor > 1 and (len(self.operator) > 1 or not self.operator.get('MinLevel')):
+            log.warning("Checking in batch for any requirement other than MinLevel"
+                        " may have unexpected results: %s x %s", factor, self)
         squality = save.qualities.get(self.quality.id) or SaveQuality.new(self.quality.id)
         for op, value in self.operator.items():
             if op not in self._OPS:
                 continue
             if   op == 'MinLevel':
-                if squality.value < value: return False
+                if squality.value < value * factor: return False
             elif op == 'MaxLevel':
                 if squality.value > value: return False
             else:
-                log.warning("Can not check, not implemented: %r", self)
+                log.warning("Can not check requirement, operation not implemented: %s", self)
                 return False
         return True
 
