@@ -49,12 +49,14 @@
 #    specs and ideas from http://code.activestate.com/recipes/577227/
 # - Improve SaveQualities/SaveQuality: Better pretty/bare, proper idx on .wiki()
 # - Take a look on _IGNORED/OPTIONAL_FIELDS, and parse more of them.
-# - Use {{yellow|...}} or another template for wiki advanced text
-# - Use {{status|...}} or another template for wiki quality status
 # - Revamp QualityOperator._format() the same way done in Requirement.
 #   - Also, either move to Effects (good) or unify them both (possibly not viable)
-# - For Officers, parse and display "UseEvent": the event triggered on Use/Talk
 # - Create a ShipSlots hardcoded mapping table, recreating game DLL data
+# - class Dummy with __bool__() returning False, each class has a dummy counterpart,
+#   inheriting from both itself and Dummy, all instance attributes as class attributes,
+#   falsy value, no specialized methods. To be used as return value instead of None
+# - Implement Action.do(save): check requirement, choose outcome, apply effects
+# - Implement Entities._eval_adv() for Effect.apply() and Requirement.check(). ast.parse
 
 # Knowledge
 # ------------------
