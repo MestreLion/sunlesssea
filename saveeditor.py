@@ -168,8 +168,9 @@ def antiquarian(query, amount):
     else:
         raise sunlesssea.Error("No action to sell %s in %s", squality.quality, event)
 
-    qty = action.do(qty)
-    if qty:
+    results = action.do(qty, output=list)
+    log.debug(results)
+    if len(results):
         log.info("Sold %2d x %s: %d => %d",
                  value - squality.value, squality.name, value, squality.value)
 

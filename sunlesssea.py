@@ -55,9 +55,10 @@
 # - class Dummy with __bool__() returning False, each class has a dummy counterpart,
 #   inheriting from both itself and Dummy, all instance attributes as class attributes,
 #   falsy value, no specialized methods. To be used as return value instead of None
-# - Implement challenges in Requirement.check()/Action.do()
+# - Implement challenges in Requirement.check()
 # - Implement Entities._eval_adv() for Effect.apply() and Requirement.check(). ast.parse
 # - Fix Outcome.label/__str__()/re.sub() madness, and create a proper __repr__()
+# - Result values from Requirement.check()/Action.do() are messy.
 
 # Knowledge
 # ------------------
@@ -170,15 +171,22 @@ class CheckResult:
     """Enum-like class, attributes used as return value of Requirement.check()
 
     Represents the requirement evalualion to determine the action outcome:
-    LOCKED : Requirement NOT met, action is "Locked". Value is Falsy by design.
-    DEFAULT: Requirement met, no challenge.
-    FAILURE: Requirement met but challenge failed.
-    SUCCESS: Requirement met and challenge successful.
+    LOCKED :      Requirement NOT met, action is "Locked". Value is Falsy by design.
+    DEFAULT:      Requirement met, no challenge.
+    RARE:         Requirement met, no challenge, rare outcome.
+    FAILURE:      Requirement met but challenge failed.
+    SUCCESS:      Requirement met and challenge successful.
+    RARE_FAILURE: Requirement met and challenge had a rare failure.
+    RARE_SUCCESS: Requirement met and challenge had a rare success.
     """
-    LOCKED   = ""
-    DEFAULT  = "DEFAULT"
-    FAILURE  = "Default"  # Similar to DEFAULT by design: they are the same in game data
-    SUCCESS  = "Success"
+    LOCKED       = ""
+    DEFAULT      = "DEFAULT"
+    RARE         = "RAREDEFAULT"
+    FAILURE      = "Default"  # Similar to DEFAULT by design: they're the same in game data
+    SUCCESS      = "Success"
+    RARE_FAILURE = "RareDefault"
+    RARE_SUCCESS = "RareSuccess"
+
 
 ################################################################################
 # Main() and helpers
@@ -1851,6 +1859,14 @@ class Action(BaseEvent):
             result = self.check(save=save)
             if not result:
                 break  # Requirements not met
+            # Do adjustments based on whether a challenge happened
+            if result == CheckResult.DEFAULT:
+                # No challenge
+                showlog = False
+                resfunc = str.upper
+            else:
+                showlog = True
+                resfunc = lambda _: _  # No-op
             # Get default outcome
             otype = "{}Event".format(result.title())
             outcome = self._outdict[otype]
@@ -1859,16 +1875,18 @@ class Action(BaseEvent):
             # Choose outcome
             if rare:
                 if random.randrange(100) < rare.chance:
+                    # Rare
                     outcome = rare
                     result = rare.type.replace("Event", "")
-                    loglabel = "Rare"
+                    showlog = True
                 else:
-                    # result does not change
-                    loglabel = "" # "Normal"
+                    # Normal
+                    pass
             else:
-                result = result.upper()
-                loglabel = ""  # "Default"
-            if loglabel:
+                # Default
+                pass
+            result = resfunc(result)
+            if showlog:
                 log.debug("%r: %s", self, re.sub(" [Dd]efault", "", str(outcome)))
                 #log.debug("%s outcome in %r: %r", loglabel.title(), self, outcome)
             # Apply outcome effects
