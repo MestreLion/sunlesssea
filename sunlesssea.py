@@ -1195,7 +1195,9 @@ class Effect(QualityOperator):
                           self.parent, self, ops)
 
 
-    def apply(self, save):
+    def apply(self, save=None):
+        if save is None:
+            save = self.ss.autosave
         squality = save.qualities.get(self.quality.id)
         if not squality:
             squality = save.add_quality(self.quality)
@@ -1238,7 +1240,9 @@ class Requirement(QualityOperator):
     ))
 
 
-    def check(self, save):
+    def check(self, save=None):
+        if save is None:
+            save = self.ss.autosave
         squality = save.qualities.get(self.quality.id) or SaveQuality.new(self.quality.id)
         for op, value in self.operator.items():
             if op not in self._OPS:
@@ -1306,6 +1310,7 @@ class Requirement(QualityOperator):
                 tokenize(self._Op.INVALID, op=op)
                 log.error("Unknown operation in %r.%r.%r: %s = %r",
                           self.parent.parent, self.parent, self, op, value)
+
         return tokens
 
 
@@ -1421,16 +1426,18 @@ class BaseEvent(Entity):
                          parent.id, iid)
 
 
-    def _apply(self, save):
+    def _apply(self, save=None):
         """Apply all effects to the save file qualities.
 
         Triggered Events, Exotic Effects and Move to Area are currently ignored.
         """
+        if save is None:
+            save = self.ss.autosave
         if not hasattr(self, 'effects'):
             raise NotImplementedError("{} has no effects to apply".format(
                                       self.__class__.__name__))
         for effect in self.effects:
-            effect.apply(save)
+            effect.apply(save=save)
         for attr in ('trigger', 'exoticeffects', 'movetoarea'):
             attrval = getattr(self, attr, None)
             if attrval:
@@ -1438,13 +1445,15 @@ class BaseEvent(Entity):
                 log.warning("Can not apply %r, not implemented: %r",
                             attr.title(), attrval)
 
-    def _check(self, save):
+    def _check(self, save=None):
         """Check all requirements against the save file qualities."""
+        if save is None:
+            save = self.ss.autosave
         if not hasattr(self, 'requirements'):
             raise NotImplementedError("{} has no requirements to check".format(
                                       self.__class__.__name__))
         for requirement in self.requirements:
-            if not requirement.check(save):
+            if not requirement.check(save=save):
                 return False
         return True
 
@@ -1805,13 +1814,15 @@ class Action(BaseEvent):
     check = BaseEvent._check
 
 
-    def do(self, save, repeats=1):
+    def do(self, repeats=1, save=None):
+        if save is None:
+            save = self.ss.autosave
         counter = 0
         for _ in range(repeats):
-            if not self.check(save): break
+            if not self.check(save=save): break
             # FIXME: choose a single outcome!
             for outcome in self.outcomes:
-                outcome.apply(save)
+                outcome.apply(save=save)
             counter += 1
         return counter
 

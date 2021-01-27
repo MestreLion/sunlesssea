@@ -136,7 +136,7 @@ def naples():
         value = squality.value
         qty = min(max(value, cap or value + free) - value, free)
         log.debug("%s + %s", squality, qty)
-        qty = action.do(ss.autosave, qty)
+        qty = action.do(qty)
         if qty:
             log.info("Purchased %s: %d => %d (%+d)",
                      squality.name, value, squality.value, squality.value - value)
@@ -168,7 +168,7 @@ def antiquarian(query, amount):
     else:
         raise sunlesssea.Error("No action to sell %s in %s", squality.quality, event)
 
-    qty = action.do(ss.autosave, qty)
+    qty = action.do(qty)
     if qty:
         log.info("Sold %s: %d => %d (%+d)",
                  squality.name, value, squality.value, squality.value - value)
