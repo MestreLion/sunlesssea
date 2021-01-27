@@ -1207,8 +1207,8 @@ class Effect(QualityOperator):
                 if squality.value < value: return
             elif op == 'OnlyIfNoMoreThan':
                 if squality.value > value: return
-            elif op == 'SetToExactly': squality.value = value
-            elif op == 'Level':        squality.increment(value)
+            elif op == 'SetToExactly': squality.set_to(value)
+            elif op == 'Level':        squality.increase_by(value)
             else:
                 log.warning("Can not apply effect, operation not implemented: %s", self)
 
@@ -2379,7 +2379,7 @@ class SaveQuality:
         return SaveQuality(data=data, idx=idx, save=save, ss=ss)
 
 
-    def increment(self, value=1):
+    def increase_by(self, value=1):
         # Basic increment
         if not self.quality.usepyramidnumbers:
             self.value += value
@@ -2391,6 +2391,18 @@ class SaveQuality:
             if self.xp > self.pyramid_limit:
                 self.value += 1
                 self.xp = 0
+
+    def set_to(self, value=1, xp=0):
+        self.value = value
+        self.xp = xp
+
+        if xp:
+            if not self.quality.usepyramidnumbers:
+                log.warning("XP has no effect as %r does not use pyramid numbers",
+                            self.quality)
+            elif xp > self.pyramid_limit:
+                log.warning("XP set higher than current pyramid limit (%d) in %r: %d",
+                            self.pyramid_limit, self, xp)
 
 
     def dump(self):

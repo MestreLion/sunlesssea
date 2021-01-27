@@ -117,9 +117,9 @@ def change(query, amount, add=False):
     value = quality.value
 
     if add:
-        quality.increment(amount)
+        quality.increase_by(amount)
     else:
-        quality.value = amount
+        quality.set_to(amount)
 
     log.info("Changed [%s] '%s' from %s to %s (%+d)",
              quality.id, quality.name, value, quality.value, quality.value - value)
