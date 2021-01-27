@@ -611,6 +611,43 @@ class Entity:
         return result
 
 
+    def _eval_adv(self, text, save=None):
+        if not isinstance(text, str):
+            return text
+        if save is None:
+            save = self.ss.autosave
+
+        result = text
+        for match in re.finditer(self._re_adv, text):
+            mstr, (key, value) = match.group(), match.group('key', 'value')
+            subst = None
+
+            # Qualities
+            if key in ('q', 'qb'):
+                try:
+                    squality = self.ss.qualities.fetch(value).to_savequality(save=save)
+                    if key == 'q':
+                        subst = squality.effective  # Current value
+                    else:  # key == 'qb'
+                        subst = squality.value      # Base value
+                except Error:
+                    subst = 0                       # Quality not found
+                    log.warning("Could not find SaveQuality(%s) for %r in %r,"
+                                " assuming its value is 0", value, self, text)
+
+            # Dice roll
+            elif key == 'd':
+                subst = random.randint(1, int(self._eval_adv(value, save=save)))
+
+            else:
+                log.warn("Unknown %r key when parsing advanced string: %r", key, text)
+
+            if subst is not None:
+                result = result.replace(mstr, str(subst), 1)
+
+        return result
+
+
     def __lt__(self, other):
         return self.id < other.id
 
@@ -1251,7 +1288,10 @@ class Effect(QualityOperator):
             elif op == 'SetToExactly': squality.set_to(value)
             elif op == 'Level':        squality.increase_by(value)
             else:
-                log.warning("Can not apply effect, operation not implemented: %s", self)
+                if 'Advanced' in op:
+                    log.warning("%s = %s", self._eval_adv(value), str(self).split('=')[1].strip())
+                else:
+                    log.warning("Can not apply effect, operation not implemented: %s", self)
 
 
 
@@ -1291,7 +1331,10 @@ class Requirement(QualityOperator):
             elif op == 'MaxLevel':
                 if squality.value > value: return CheckResult.LOCKED
             else:
-                log.warning("Can not check requirement, operation not implemented: %s", self)
+                if 'Advanced' in op:
+                    log.warning("%s = %s", self._eval_adv(value), self)
+                else:
+                    log.warning("Can not check requirement, operation not implemented: %s", self)
                 return CheckResult.LOCKED
         return CheckResult.DEFAULT
 
