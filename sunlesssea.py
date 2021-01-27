@@ -55,8 +55,9 @@
 # - class Dummy with __bool__() returning False, each class has a dummy counterpart,
 #   inheriting from both itself and Dummy, all instance attributes as class attributes,
 #   falsy value, no specialized methods. To be used as return value instead of None
-# - Implement Action.do(save): check requirement, choose outcome, apply effects
+# - Implement challenges in Requirement.check()/Action.do()
 # - Implement Entities._eval_adv() for Effect.apply() and Requirement.check(). ast.parse
+# - Fix Outcome.label/__str__()/re.sub() madness, and create a proper __repr__()
 
 # Knowledge
 # ------------------
@@ -77,6 +78,7 @@ import json
 import logging
 import math
 import os
+import random
 import re
 import sys
 import urllib.parse
@@ -164,6 +166,19 @@ class Error(Exception):
         self.errno = errno
 
 
+class CheckResult:
+    """Enum-like class, attributes used as return value of Requirement.check()
+
+    Represents the requirement evalualion to determine the action outcome:
+    LOCKED : Requirement NOT met, action is "Locked". Value is Falsy by design.
+    DEFAULT: Requirement met, no challenge.
+    FAILURE: Requirement met but challenge failed.
+    SUCCESS: Requirement met and challenge successful.
+    """
+    LOCKED   = ""
+    DEFAULT  = "DEFAULT"
+    FAILURE  = "Default"  # Similar to DEFAULT by design: they are the same in game data
+    SUCCESS  = "Success"
 
 ################################################################################
 # Main() and helpers
@@ -1248,13 +1263,13 @@ class Requirement(QualityOperator):
             if op not in self._OPS:
                 continue
             if   op == 'MinLevel':
-                if squality.value < value: return False
+                if squality.value < value: return CheckResult.LOCKED
             elif op == 'MaxLevel':
-                if squality.value > value: return False
+                if squality.value > value: return CheckResult.LOCKED
             else:
                 log.warning("Can not check requirement, operation not implemented: %s", self)
-                return False
-        return True
+                return CheckResult.LOCKED
+        return CheckResult.DEFAULT
 
 
     def _tokenize(self):
@@ -1452,10 +1467,20 @@ class BaseEvent(Entity):
         if not hasattr(self, 'requirements'):
             raise NotImplementedError("{} has no requirements to check".format(
                                       self.__class__.__name__))
+        # A single LOCKED: bail out
+        # A single challenge fail: FAILURE
+        # All challenges successful: SUCCESS
+        # No challenge: DEFAULT
+        output = CheckResult.DEFAULT
         for requirement in self.requirements:
-            if not requirement.check(save=save):
-                return False
-        return True
+            result = requirement.check(save=save)
+            if not result:
+                return CheckResult.LOCKED
+            elif result == CheckResult.FAILURE:
+                output = CheckResult.FAILURE
+            elif result == CheckResult.SUCCESS and not output == CheckResult.FAILURE:
+                output = CheckResult.SUCCESS
+        return output
 
 
     def pretty(self, location=None, short=False):
@@ -1706,16 +1731,19 @@ class Action(BaseEvent):
         self.canfail      = 'SuccessEvent' in self._data
 
         self.outcomes = []
+        self._outdict = {}
         for i, item in enumerate((_ for _ in self._OUTCOME_TYPES
                                   if _ in self._data), 1):
-            self.outcomes.append(Outcome(
+            outcome = Outcome(
                  data      = self._data[item],
                  idx       = i,
                  parent    = self,
                  ss        = self.ss,
                  otype     = item,
                  chance    = self._data.get(item + 'Chance', None),
-                 label     = self._outcome_label(item)))
+                 label     = self._outcome_label(item))
+            self.outcomes.append(outcome)
+            self._outdict[item] = outcome
 
         # Integrity checks
         if not TEST_INTEGRITY:
@@ -1814,17 +1842,39 @@ class Action(BaseEvent):
     check = BaseEvent._check
 
 
-    def do(self, repeats=1, save=None):
+    def do(self, repeats=1, save=None, output=len):
         if save is None:
             save = self.ss.autosave
-        counter = 0
+        results = []
         for _ in range(repeats):
-            if not self.check(save=save): break
-            # FIXME: choose a single outcome!
-            for outcome in self.outcomes:
-                outcome.apply(save=save)
-            counter += 1
-        return counter
+            # Check Requirements
+            result = self.check(save=save)
+            if not result:
+                break  # Requirements not met
+            # Get default outcome
+            otype = "{}Event".format(result.title())
+            outcome = self._outdict[otype]
+            # Check for rare outcome, if any
+            rare = self._outdict.get('Rare{}'.format(otype))
+            # Choose outcome
+            if rare:
+                if random.randrange(100) < rare.chance:
+                    outcome = rare
+                    result = rare.type.replace("Event", "")
+                    loglabel = "Rare"
+                else:
+                    # result does not change
+                    loglabel = "" # "Normal"
+            else:
+                result = result.upper()
+                loglabel = ""  # "Default"
+            if loglabel:
+                log.debug("%r: %s", self, re.sub(" [Dd]efault", "", str(outcome)))
+                #log.debug("%s outcome in %r: %r", loglabel.title(), self, outcome)
+            # Apply outcome effects
+            outcome.apply(save=save)
+            results.append(result)
+        return output(results)
 
 
     def pretty(self):
