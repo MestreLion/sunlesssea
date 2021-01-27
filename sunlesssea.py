@@ -59,6 +59,7 @@
 # - Implement Entities._eval_adv() for Effect.apply() and Requirement.check(). ast.parse
 # - Fix Outcome.label/__str__()/re.sub() madness, and create a proper __repr__()
 # - Result values from Requirement.check()/Action.do() are messy.
+# - For all child classes, self.ss should be a property returning parent.ss
 
 # Knowledge
 # ------------------
@@ -752,6 +753,21 @@ class Quality(Entity):
         if not self.difficultyscaler:
             return 0
         return 100.0 / self.difficultyscaler
+
+
+    def to_savequality(self, save=None, add=False, **new_kwargs):
+        if save is None:
+            save = self.ss.autosave
+        squality = save.qualities.get(self.id)
+        if squality:
+            # Return the existing one
+            return squality
+        if add:
+            # Create a new one, adding to save: included in save.qualities and save.save()
+            return save.add_quality(self.id, **new_kwargs)
+        else:
+            # Create a new, fully detached one: NOT in save.qualities or save.save()
+            return SaveQuality.new(self.id, **new_kwargs)
 
 
     def challenge_cap(self, difficulty):
@@ -2419,6 +2435,10 @@ class SaveQuality:
         value = self.value
         limit = self.quality.pyramidnumberincreaselimit or value
         return min(value, limit)
+
+    @property
+    def effective(self):
+        return self.value + self.modifier
 
     @property
     def value(self):
