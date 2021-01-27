@@ -138,8 +138,8 @@ def naples():
         log.debug("%s + %s", squality, qty)
         qty = action.do(qty)
         if qty:
-            log.info("Purchased %s: %d => %d (%+d)",
-                     squality.name, value, squality.value, squality.value - value)
+            log.info("Purchased %2d x %s: %d => %d",
+                     squality.value - value, squality.name, value, squality.value)
         return qty
 
     event = ss.events.fetch('In Naples')
@@ -170,8 +170,8 @@ def antiquarian(query, amount):
 
     qty = action.do(qty)
     if qty:
-        log.info("Sold %s: %d => %d (%+d)",
-                 squality.name, value, squality.value, squality.value - value)
+        log.info("Sold %2d x %s: %d => %d",
+                 value - squality.value, squality.name, value, squality.value)
 
 
 if __name__ == '__main__':

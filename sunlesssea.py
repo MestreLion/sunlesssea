@@ -2414,7 +2414,7 @@ class SaveQuality:
             # Silently ignore, like the games does with, for example, Terror
             # log.warning("Setting %r to a negative value, ignoring: %r", self, value)
             return
-        log.debug("%r => %r", self, value)
+        log.debug("%+5d x %r => %r ", value - self.value, self, value)
         self._data['Level'] = value
 
     @property
