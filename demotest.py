@@ -25,10 +25,18 @@ log = logging.getLogger(os.path.basename(os.path.splitext(__file__)[0]))
 
 
 def eval_all():
+    def safe_eval(expr):
+        for c in expr:
+            if c not in '12+34-(5.6*78/ 90)':  # Heh
+                log.warning("Not a valid simple algebraic expresion: %s", expr)
+                break
+        if '**' in expr:
+            log.warning("Exponentiation not allowed in simple algebraic expresions: %s", expr)
+        return expr
+
     def do_adv(qualop, adv):
-        #log.debug("%s = %s", qualop._eval_adv(adv), str(self).split('=')[1].strip())
-        #log.debug("%s = %s", qualop._eval_adv(adv), qualop)
-        log.info("%s = %s", qualop._eval_adv(adv), qualop._parse_adv(adv))
+        expr = qualop._eval_adv(adv)
+        log.debug("%s\n\n", "\n".join((qualop._parse_adv(adv), adv, expr, safe_eval(expr))))
 
     def do_advs(qualops):
         for qualop in qualops:
@@ -37,7 +45,7 @@ def eval_all():
                     try:
                         do_adv(qualop, qualop.operator[op])
                     except ValueError as e:
-                        log.error("Error in %r: %s", qualop, e)
+                        log.error("%r: %s [%s]\n", qualop, qualop.operator[op], e)
 
     for event in ss.events:
         do_advs(event.requirements)

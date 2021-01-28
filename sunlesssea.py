@@ -1085,7 +1085,12 @@ class QualityOperator(Entity):
 
             # Dice roll
             elif key == 'd':
-                subst = random.randint(1, int(self._eval_adv(value, save=save)))
+                try:
+                    v = int(self._eval_adv(value, save=save))
+                except ValueError as e:
+                    v = 0
+                    log.error("%s in %r: %s", e, self, value)
+                subst = random.randint(1, v) if v else 0
 
             else:
                 log.warn("Unknown %r key when parsing advanced string: %r", key, text)
