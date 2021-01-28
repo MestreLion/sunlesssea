@@ -61,19 +61,34 @@ def eval_all():
     def safe_eval(expr):
         if not _re_safe_eval.fullmatch(expr) or '**' in expr:
             raise sunlesssea.Error("Not a valid simple algebraic expression: %s", expr)
-        return int(eval(expr, {'__builtins__': None}))
+        return eval(expr, {'__builtins__': None})
 
     # https://stackoverflow.com/a/9558001/624066
     def ast_eval(expr):
-        return expr
+        import ast
+        import operator as op
+        # supported operators
+        ops = {ast.USub: op.neg, ast.UAdd: op.pos,
+               ast.Add:  op.add, ast.Sub:  op.sub,
+               ast.Mult: op.mul, ast.Div:  op.truediv}
+        def _eval(node):
+            if isinstance(node, ast.Num): # <number>
+                return node.n
+            elif isinstance(node, ast.BinOp): # <left> <operator> <right>
+                return ops[type(node.op)](_eval(node.left), _eval(node.right))
+            elif isinstance(node, ast.UnaryOp): # <operator> <operand> e.g., -1
+                return ops[type(node.op)](_eval(node.operand))
+            else:
+                raise sunlesssea.Error("Not a valid simple algebraic expression: %s", expr)
+        return _eval(ast.parse(expr, mode='eval').body)
 
     def do_adv(qualop, adv):
         expr = qualop._eval_adv(adv)
         res1 = safe_eval(expr)
         res2 = simple_eval(expr)
         res3 = ast_eval(expr)
-        if not (res1 == res2 == res3):
-            raise sunlesssea.Error("Not equal: %s = %s = %s", res1, res2, res3)
+        if not ((res1 == res2 == res3) and (type(res1) == type(res2) == type(res3))):
+            raise sunlesssea.Error("Not equal: %r = %s = %s = %s", expr, res1, res2, res3)
         log.debug("%s\n\n", "\n".join((qualop._parse_adv(adv), adv, expr, str(res1))))
 
     def do_advs(qualops):
