@@ -9,7 +9,6 @@ Sunless Sea testing
 """
 
 import logging
-import random
 import os
 import sys
 
@@ -24,19 +23,18 @@ ss = None
 
 
 def demo():
-    from sunlesssea import safeprint
     for event in ss.events.at(name="Pigmote Isle"):  # ID = 102804
-        safeprint(event.pretty())
-        safeprint()
+        print(event.pretty())
+        print()
     location = ss.locations.get(102004)
-    safeprint(repr(location))
-    safeprint(location)
+    print(repr(location))
+    print(location)
     locations = ss.locations.find("pigmote")
-    safeprint(locations)
+    print(locations)
     for location in ss.locations[3:6]:
-        safeprint(location.pretty())
+        print(location.pretty())
     for event in ss.events.at(name="Pigmote Isle").find("rose"):
-        safeprint(repr(event))
+        print(repr(event))
 
 
 

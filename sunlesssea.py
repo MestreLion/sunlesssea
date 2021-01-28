@@ -106,23 +106,11 @@ ENTITIES = {
 ################################################################################
 # General helper functions
 
-def safeprint(text=""):
-    # print() chooses encoding based on stdout type, if it's a tty (terminal)
-    # or file (redirect/pipe); For ttys it auto-detects the terminals's
-    # preferred encoding, but for files and pipes, sys.stdout.encoding
-    # defaults to None in Python 2.7, so ascii is used (ew!).
-    # In this case we encode to UTF-8.
-    # See https://stackoverflow.com/questions/492483
-    print(text)
-
-
-
 def format_obj(fmt, obj, *args, **kwargs):
     objdict = {_:getattr(obj, _) for _ in vars(obj) if not _.startswith('_')}
     objdict.update(dict(str=str(obj), repr=repr(obj)))
     objdict.update(kwargs)
     return fmt.format(*args, **objdict)
-
 
 
 def indent(text, level=1, pad='\t'):
@@ -136,25 +124,11 @@ def indent(text, level=1, pad='\t'):
                          ('\n'+indent).join(text.rstrip().split('\n')))
 
 
-
 def iif(cond, trueval, falseval=""):
     if cond:
         return trueval
     else:
         return falseval
-
-
-
-# FIXME: Not used yet, most likely will never be
-def try_number(value):
-    try:
-        return int(value)
-    except ValueError:
-        try:
-            return float(value)
-        except ValueError:
-            return value
-
 
 
 class Error(Exception):
@@ -309,17 +283,17 @@ def main(argv=None):
 
     if args.entity == "demo":
         for event in ss.events.at(name="Pigmote Isle"):  # ID = 102804
-            safeprint(event.pretty())
-            safeprint()
+            print(event.pretty())
+            print()
         location = ss.locations.get(102004)
-        safeprint(repr(location))
-        safeprint(location)
+        print(repr(location))
+        print(location)
         locations = ss.locations.find("pigmote")
-        safeprint(locations)
+        print(locations)
         for location in ss.locations[3:6]:
-            safeprint(location.pretty())
+            print(location.pretty())
         for event in ss.events.at(name="Pigmote Isle").find("rose"):
-            safeprint(repr(event))
+            print(repr(event))
         return
 
     if args.method == 'cargo':
@@ -353,27 +327,27 @@ def main(argv=None):
         if not args.entity == 'qualities':
             log.error("Method 'usage' only available for qualities")
             return 1
-        safeprint(entities.usage(args.format))
+        print(entities.usage(args.format))
         return
     elif args.method == 'related':
         if not args.entity == 'events':
             log.error("Method 'related' only available for events")
             return 1
-        safeprint(entities.wiki_linkicons())
+        print(entities.wiki_linkicons())
         return
 
     if args.format == 'wiki':
-        safeprint(entities.wikitable())
+        print(entities.wikitable())
     elif args.format == 'wikipage':
-        safeprint(entities.wikipage())
+        print(entities.wikipage())
     elif args.format == 'pretty':
-        safeprint(entities.pretty())
+        print(entities.pretty())
     elif args.format == 'dump':
-        safeprint(entities.dump())
+        print(entities.dump())
     elif args.format == 'json':
-        safeprint(entities.to_json())
+        print(entities.to_json())
     else:
-        safeprint(entities.bare())
+        print(entities.bare())
     return
 
 
@@ -715,7 +689,7 @@ class Quality(Entity):
 
 
     def __init__(self, data, idx=0, ss=None):
-        super(Quality, self).__init__(data=data, idx=idx, ss=ss)
+        super().__init__(data=data, idx=idx, ss=ss)
         # For scalar (atomic, non-mutable) values only!
         for attr, atype, default in (
             ("AvailableAt",                str,  ""),
@@ -836,7 +810,7 @@ class Quality(Entity):
 
 
     def pretty(self):
-        pretty = super(Quality, self).pretty()
+        pretty = super().pretty()  # Super Pretty! Heh
 
         if self.availableat:
             pretty += "{}\t{}\n".format(iif(self.description, "", '\n'),
@@ -978,13 +952,13 @@ class Location(Entity):
 
 
     def __init__(self, data, idx=0, ss=None):
-        super(Location, self).__init__(data=data, idx=idx, ss=ss)
+        super().__init__(data=data, idx=idx, ss=ss)
         self.message = self._data.get('MoveMessage', "")
         self.setting = 0
 
 
     def pretty(self):
-        pretty = super(Location, self).pretty().strip()  # No '\n' after Description
+        pretty = super().pretty().strip()  # No '\n' after Description
         if self.message:
             pretty += "\n\tMessage: {}".format(self._pretty_text(self.message))
         return pretty
@@ -998,7 +972,7 @@ class ShopItem(Entity):
 
 
     def __init__(self, data, idx=0, ss=None, shop=None):
-        super(ShopItem, self).__init__(data=data, idx=idx, ss=ss)
+        super().__init__(data=data, idx=idx, ss=ss)
         self.shop     = shop
         self.item     = ss.qualities.get(self._data['Quality']['Id'])
         self.currency = ss.qualities.get(self._data['PurchaseQuality']['Id'])
@@ -1035,7 +1009,7 @@ class Shop(Entity):
 
 
     def __init__(self, data, idx=0, ss=None, locations=None):
-        super(Shop, self).__init__(data=data, idx=idx, ss=ss)
+        super().__init__(data=data, idx=idx, ss=ss)
         self.locations = locations
         self.items = [ShopItem(data=_d, idx=_i, ss=self.ss, shop=self)
                       for _i, _d in
@@ -1051,7 +1025,7 @@ class Shop(Entity):
 
 
     def pretty(self):
-        pretty = super(Shop, self).pretty()
+        pretty = super().pretty()
         locations = (
             "\n\tLocation: {}".format(", ".join(str(_) for _ in self.locations))
         ) if self.locations else ""
@@ -1082,7 +1056,7 @@ class QualityOperator(Entity):
 
 
     def __init__(self, data, idx=0, parent=None, ss=None):
-        super(QualityOperator, self).__init__(data=data, idx=idx, ss=ss)
+        super().__init__(data=data, idx=idx, ss=ss)
 
         self.parent   = parent
         self.quality  = None
@@ -1260,7 +1234,7 @@ class Effect(QualityOperator):
 
 
     def __init__(self, data, idx=0, parent=None, ss=None):
-        super(Effect, self).__init__(data=data, idx=idx, parent=parent, ss=ss)
+        super().__init__(data=data, idx=idx, parent=parent, ss=ss)
 
         # Integrity check
         if TEST_INTEGRITY:
@@ -1626,7 +1600,7 @@ class Event(BaseEvent):
 
 
     def __init__(self, data, idx=0, ss=None):
-        super(Event, self).__init__(data=data, idx=idx, ss=ss)
+        super().__init__(data=data, idx=idx, ss=ss)
 
         self.autofire = self._data.get("Autofire", False)
         self.category = self._data.get("Category", 0)
@@ -1659,8 +1633,7 @@ class Event(BaseEvent):
 
 
     def pretty(self, short=False):
-        out = [super(Event, self).pretty(location=self.location,
-                                         short=short).strip()]
+        out = [super().pretty(location=self.location, short=short).strip()]
 
         out.append(indent(self._pretty_qualops('effects', short=short)))
 
@@ -1792,7 +1765,7 @@ class Action(BaseEvent):
 
 
     def __init__(self, data, idx=0, parent=None, ss=None):
-        super(Action, self).__init__(data=data, idx=idx, parent=parent, ss=ss)
+        super().__init__(data=data, idx=idx, parent=parent, ss=ss)
 
         self.requirements = list(self._create_qualops('requirements'))
         self.canfail      = 'SuccessEvent' in self._data
@@ -1955,7 +1928,7 @@ class Action(BaseEvent):
 
 
     def pretty(self):
-        pretty = super(Action, self).pretty().strip()
+        pretty = super().pretty().strip()
 
         for item in self.outcomes:
             pretty += "\n\n{}".format(indent(item.pretty(), 1))
@@ -2049,7 +2022,7 @@ class Outcome(BaseEvent):
 
     def __init__(self, data, idx=0, parent=None, ss=None,
                  otype=None, chance=None, label=None):
-        super(Outcome, self).__init__(data=data, idx=idx, parent=parent, ss=ss)
+        super().__init__(data=data, idx=idx, parent=parent, ss=ss)
 
         self.type    = otype
         self.chance  = chance
@@ -2343,6 +2316,7 @@ class Events(Entities):
 
     def at(self, lid=0, name=""):
         '''Return Events by location ID or name'''
+        #TODO: use self.ss.locations.find(query) to greatly simplify this
         return Events(ss=self.ss,
                       entities=(_ for _
                                 in self
