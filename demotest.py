@@ -57,9 +57,6 @@ def eval_test():
 
 
 def choose(chance, i=10000):
-    chance = int(chance)
-    i = int(i)
-    # ----
     a = 0
     for _ in range(i):
         if random.choices('ab', cum_weights=(chance, 100))[0] == 'a':
@@ -196,6 +193,13 @@ def main():
     if func not in funcs:
         log.error("Function %r does not exist! Try one of:\n\t%s",  "\n\t".join(funcs))
         return
+
+    def try_int(value):
+        try:
+            return int(value)
+        except ValueError:
+            return value
+    args = [try_int(_) for _ in args]
 
     try:
         globals()[func](*args)
