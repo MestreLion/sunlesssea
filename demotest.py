@@ -10,6 +10,7 @@ Sunless Sea testing
 
 import logging
 import random
+import re
 import os
 import sys
 
@@ -24,19 +25,56 @@ log = logging.getLogger(os.path.basename(os.path.splitext(__file__)[0]))
 # Add new functions here, moving old ones down
 
 
+def simple_eval_test():
+    for expr, res in (
+        ('2^4',                        6      ),
+        ('2**4',                      16      ),
+        ('1 + 2*3**(4^5) / (6 + -7)', -5.0    ),
+        ('7 + 9 * (2 << 2)',          79      ),
+        ('6 // 2 + 0.0',               3.0    ),
+        ('2+3',                        5      ),
+        ('6+4/2*2',                   10.0    ),
+        ('3+2.45/8',                   3.30625),
+        ('3**3*3/3+3',                30.0    ),
+    ):
+        result = simple_eval(expr)
+        ok = (result == res and type(result) == type(res))
+        print("{} {} = {}".format("OK!" if ok else "FAIL!", expr, result))
+
+
+# https://stackoverflow.com/a/65945969/624066
+# Kept outside simple_eval() just for performance
+_re_simple_eval = re.compile(rb'd([\x00-\xFF]+)S\x00')
+def simple_eval(expr):
+    c = compile(expr, 'userinput', 'eval')
+    m = _re_simple_eval.fullmatch(c.co_code)
+    if not m:
+        raise sunlesssea.Error("Not a simple algebraic expression: %s", expr)
+    return c.co_consts[int.from_bytes(m.group(1), sys.byteorder)]
+
+
 def eval_all():
+    # Alternatives:
+    # https://pypi.org/project/simpleeval/
+    # https://stackoverflow.com/questions/2371436
+    _re_safe_eval = re.compile(r'[.0-9 ()*/+-]+')
     def safe_eval(expr):
-        for c in expr:
-            if c not in '12+34-(5.6*78/ 90)':  # Heh
-                log.warning("Not a valid simple algebraic expresion: %s", expr)
-                break
-        if '**' in expr:
-            log.warning("Exponentiation not allowed in simple algebraic expresions: %s", expr)
+        if not _re_safe_eval.fullmatch(expr) or '**' in expr:
+            raise sunlesssea.Error("Not a valid simple algebraic expression: %s", expr)
+        return int(eval(expr, {'__builtins__': None}))
+
+    # https://stackoverflow.com/a/9558001/624066
+    def ast_eval(expr):
         return expr
 
     def do_adv(qualop, adv):
         expr = qualop._eval_adv(adv)
-        log.debug("%s\n\n", "\n".join((qualop._parse_adv(adv), adv, expr, safe_eval(expr))))
+        res1 = safe_eval(expr)
+        res2 = simple_eval(expr)
+        res3 = ast_eval(expr)
+        if not (res1 == res2 == res3):
+            raise sunlesssea.Error("Not equal: %s = %s = %s", res1, res2, res3)
+        log.debug("%s\n\n", "\n".join((qualop._parse_adv(adv), adv, expr, str(res1))))
 
     def do_advs(qualops):
         for qualop in qualops:
@@ -211,7 +249,9 @@ def main():
     args = [try_int(_) for _ in args]
 
     try:
-        globals()[func](*args)
+        res = globals()[func](*args)
+        if res is not None:
+            print(repr(res))
     except TypeError as e:
         log.error(e)
 
