@@ -192,7 +192,7 @@ def main():
     func = sys.argv[1]
     args = sys.argv[2:]
     if func not in funcs:
-        log.error("Function %r does not exist! Try one of:\n\t%s",  "\n\t".join(funcs))
+        log.error("Function %r does not exist! Try one of:\n\t%s", func, "\n\t".join(funcs))
         return
 
     def try_int(value):
