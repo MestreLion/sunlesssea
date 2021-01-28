@@ -217,4 +217,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        sys.exit(main())
+    except sunlesssea.Error as e:
+        log.error(e)
