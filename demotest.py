@@ -81,6 +81,7 @@ def printqualop(qualop):
     print(u"WIKI:\t{}".format(qualop.wiki()))
     print("")
 
+    #TODO: These were meant as distinct functions. Make it so!
 #     try:
 #         args = sys.argv[1]
 #     except Exception:

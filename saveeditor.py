@@ -114,7 +114,7 @@ def main(argv=None):
 
 def change(query, amount, add=False):
     quality = ss.autosave.qualities.fetch(query, partial=True)
-    value = quality.value
+    value = quality.value  # save old value, for logging purposes
 
     if add:
         quality.increase_by(amount)

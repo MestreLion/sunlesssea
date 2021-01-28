@@ -20,7 +20,7 @@
 """
 
 # Ideas / To-Do list
-# ------------------
+# ===================
 # - Make q/e/l/a entity cmd arg optional, by default searches all entities.
 # - Create --exact|-E to match exact names (useful for 'supplies' and others)
 # - Improve Entities.filter(): if attr value is str, do partial/insentive like find()
@@ -62,7 +62,7 @@
 # - For all child classes, self.ss should be a property returning parent.ss
 
 # Knowledge
-# ------------------
+# ===================
 # Journal: sections named by Tag.
 # Ship Slots: the Ship<->Slots mapping are hardcoded in game's DLL files :(
 #   But can be somewhat edited by changing the Slot Quality value to 1
