@@ -584,43 +584,6 @@ class Entity:
         return result
 
 
-    def _eval_adv(self, text, save=None):
-        if not isinstance(text, str):
-            return text
-        if save is None:
-            save = self.ss.autosave
-
-        result = text
-        for match in re.finditer(self._re_adv, text):
-            mstr, (key, value) = match.group(), match.group('key', 'value')
-            subst = None
-
-            # Qualities
-            if key in ('q', 'qb'):
-                try:
-                    squality = self.ss.qualities.fetch(value).to_savequality(save=save)
-                    if key == 'q':
-                        subst = squality.effective  # Current value
-                    else:  # key == 'qb'
-                        subst = squality.value      # Base value
-                except Error:
-                    subst = 0                       # Quality not found
-                    log.warning("Could not find SaveQuality(%s) for %r in %r,"
-                                " assuming its value is 0", value, self, text)
-
-            # Dice roll
-            elif key == 'd':
-                subst = random.randint(1, int(self._eval_adv(value, save=save)))
-
-            else:
-                log.warn("Unknown %r key when parsing advanced string: %r", key, text)
-
-            if subst is not None:
-                result = result.replace(mstr, str(subst), 1)
-
-        return result
-
-
     def __lt__(self, other):
         return self.id < other.id
 
@@ -1096,6 +1059,112 @@ class QualityOperator(Entity):
         )
 
 
+    def _eval_adv(self, text, save=None):
+        if not isinstance(text, str):
+            return text
+        if save is None:
+            save = self.ss.autosave
+
+        result = text
+        for match in re.finditer(self._re_adv, text):
+            mstr, (key, value) = match.group(), match.group('key', 'value')
+            subst = None
+
+            # Qualities
+            if key in ('q', 'qb'):
+                try:
+                    squality = self.ss.qualities.fetch(value).to_savequality(save=save)
+                    if key == 'q':
+                        subst = squality.effective  # Current value
+                    else:  # key == 'qb'
+                        subst = squality.value      # Base value
+                except Error:
+                    subst = 0                       # Quality not found
+                    log.warning("Could not find SaveQuality(%s) for %r in %r,"
+                                " assuming its value is 0", value, self, text)
+
+            # Dice roll
+            elif key == 'd':
+                subst = random.randint(1, int(self._eval_adv(value, save=save)))
+
+            else:
+                log.warn("Unknown %r key when parsing advanced string: %r", key, text)
+
+            if subst is not None:
+                result = result.replace(mstr, str(subst), 1)
+
+        return result
+
+
+    def _format(self, *args, **kwargs):
+        raise NotImplementedError
+
+
+    def __str__(self):
+        return self._format()
+
+
+    def __repr__(self):
+        try:
+            return "<{cls} {id}: {qid} - {qname} {ops}>".format(
+                cls   = self.__class__.__name__,
+                id    = self.id,
+                qid   = self.quality.id,
+                qname = repr(self.quality.name),
+                ops   = repr(self.operator))
+        except AttributeError:
+            # repr() requested by base class before __init__() finishes
+            return "<{cls} {id}>".format(
+                cls   = self.__class__.__name__,
+                id    = self.id)
+
+
+
+class Effect(QualityOperator):
+    # Order is important for both ._format() and .apply()!
+    _OPS = (
+        'Level',
+        'ChangeByAdvanced',
+        'SetToExactly',
+        'SetToExactlyAdvanced',
+        'OnlyIfAtLeast',
+        'OnlyIfNoMoreThan',
+    )
+    _OPTIONAL_FIELDS = QualityOperator._OPTIONAL_FIELDS | set(_OPS)
+
+
+    def __init__(self, data, idx=0, parent=None, ss=None):
+        super().__init__(data=data, idx=idx, parent=parent, ss=ss)
+
+        # Integrity check
+        if TEST_INTEGRITY:
+            ops = set(self.operator) - set(('OnlyIfAtLeast',
+                                            'OnlyIfNoMoreThan'))
+            if len(ops) > 1:
+                log.error("Mutually exclusive operators in %r.%r: %s",
+                          self.parent, self, ops)
+
+
+    def apply(self, save=None):
+        if save is None:
+            save = self.ss.autosave
+        squality = save.qualities.get(self.quality.id)
+        if not squality:
+            squality = save.add_quality(self.quality)
+        for op in reversed(self._OPS):
+            if op not in self.operator:
+                continue
+            value = self.operator[op]
+            if   op == 'OnlyIfAtLeast':
+                if squality.value < value: return
+            elif op == 'OnlyIfNoMoreThan':
+                if squality.value > value: return
+            elif op == 'SetToExactly': squality.set_to(value)
+            elif op == 'Level':        squality.increase_by(value)
+            else:
+                log.warning("Can not apply effect, operation not implemented: %s", self)
+
+
     def _format(self,
             # Defaults are suitable for __str__() and pretty()
             qfmt="{name}{sep}{ops}{ifsep}{ifs}",
@@ -1197,71 +1266,6 @@ class QualityOperator(Entity):
                           ops=opsep.join(posopstrs),
                           qtyops=qtyopsep.join(qtyopstrs),
         )
-
-
-    def __str__(self):
-        return self._format()
-
-
-    def __repr__(self):
-        try:
-            return "<{cls} {id}: {qid} - {qname} {ops}>".format(
-                cls   = self.__class__.__name__,
-                id    = self.id,
-                qid   = self.quality.id,
-                qname = repr(self.quality.name),
-                ops   = repr(self.operator))
-        except AttributeError:
-            # repr() requested by base class before __init__() finishes
-            return "<{cls} {id}>".format(
-                cls   = self.__class__.__name__,
-                id    = self.id)
-
-
-
-class Effect(QualityOperator):
-    # Order is important for both ._format() and .apply()!
-    _OPS = (
-        'Level',
-        'ChangeByAdvanced',
-        'SetToExactly',
-        'SetToExactlyAdvanced',
-        'OnlyIfAtLeast',
-        'OnlyIfNoMoreThan',
-    )
-    _OPTIONAL_FIELDS = QualityOperator._OPTIONAL_FIELDS | set(_OPS)
-
-
-    def __init__(self, data, idx=0, parent=None, ss=None):
-        super().__init__(data=data, idx=idx, parent=parent, ss=ss)
-
-        # Integrity check
-        if TEST_INTEGRITY:
-            ops = set(self.operator) - set(('OnlyIfAtLeast',
-                                            'OnlyIfNoMoreThan'))
-            if len(ops) > 1:
-                log.error("Mutually exclusive operators in %r.%r: %s",
-                          self.parent, self, ops)
-
-
-    def apply(self, save=None):
-        if save is None:
-            save = self.ss.autosave
-        squality = save.qualities.get(self.quality.id)
-        if not squality:
-            squality = save.add_quality(self.quality)
-        for op in reversed(self._OPS):
-            if op not in self.operator:
-                continue
-            value = self.operator[op]
-            if   op == 'OnlyIfAtLeast':
-                if squality.value < value: return
-            elif op == 'OnlyIfNoMoreThan':
-                if squality.value > value: return
-            elif op == 'SetToExactly': squality.set_to(value)
-            elif op == 'Level':        squality.increase_by(value)
-            else:
-                log.warning("Can not apply effect, operation not implemented: %s", self)
 
 
 
