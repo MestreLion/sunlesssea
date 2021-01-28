@@ -56,7 +56,6 @@
 #   inheriting from both itself and Dummy, all instance attributes as class attributes,
 #   falsy value, no specialized methods. To be used as return value instead of None
 # - Implement challenges in Requirement.check()
-# - Implement Entities._eval_adv() for Effect.apply() and Requirement.check(). ast.parse
 # - Fix Outcome.label/__str__()/re.sub() madness, and create a proper __repr__()
 # - Result values from Requirement.check()/Action.do() are messy.
 # - For all child classes, self.ss should be a property returning parent.ss
@@ -1262,10 +1261,7 @@ class Effect(QualityOperator):
             elif op == 'SetToExactly': squality.set_to(value)
             elif op == 'Level':        squality.increase_by(value)
             else:
-                if 'Advanced' in op:
-                    log.warning("%s = %s", self._eval_adv(value), str(self).split('=')[1].strip())
-                else:
-                    log.warning("Can not apply effect, operation not implemented: %s", self)
+                log.warning("Can not apply effect, operation not implemented: %s", self)
 
 
 
@@ -1305,10 +1301,7 @@ class Requirement(QualityOperator):
             elif op == 'MaxLevel':
                 if squality.value > value: return CheckResult.LOCKED
             else:
-                if 'Advanced' in op:
-                    log.warning("%s = %s", self._eval_adv(value), self)
-                else:
-                    log.warning("Can not check requirement, operation not implemented: %s", self)
+                log.warning("Can not check requirement, operation not implemented: %s", self)
                 return CheckResult.LOCKED
         return CheckResult.DEFAULT
 

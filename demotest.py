@@ -25,27 +25,27 @@ log = logging.getLogger(os.path.basename(os.path.splitext(__file__)[0]))
 
 
 def eval_all():
-    def do_adv(qualops, func):
+    def do_adv(qualop, adv):
+        #log.debug("%s = %s", qualop._eval_adv(adv), str(self).split('=')[1].strip())
+        #log.debug("%s = %s", qualop._eval_adv(adv), qualop)
+        log.info("%s = %s", qualop._eval_adv(adv), qualop._parse_adv(adv))
+
+    def do_advs(qualops):
         for qualop in qualops:
-            if any(op for op in qualop.operator if 'Advanced' in op):
-                try:
-                    func(qualop)
-                except ValueError as e:
-                    log.error("Error in %r: %s", qualop, e)
-
-    def check_adv_requirements(entity):
-        do_adv(entity.requirements, sunlesssea.Requirement.check)
-
-    def apply_adv_effects(entity):
-        do_adv(entity.effects, sunlesssea.Effect.apply)
+            for op in qualop.operator:
+                if 'Advanced' in op:
+                    try:
+                        do_adv(qualop, qualop.operator[op])
+                    except ValueError as e:
+                        log.error("Error in %r: %s", qualop, e)
 
     for event in ss.events:
-        check_adv_requirements(event)
-        apply_adv_effects(event)
+        do_advs(event.requirements)
+        do_advs(event.effects)
         for action in event.actions:
-            check_adv_requirements(action)
+            do_advs(action.requirements)
             for outcome in action.outcomes:
-                apply_adv_effects(outcome)
+                do_advs(outcome.effects)
 
 
 def eval_test():
