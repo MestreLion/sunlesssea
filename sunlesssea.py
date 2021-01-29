@@ -756,7 +756,7 @@ class Quality(Entity):
         else:
             # Create a new, fully detached one: NOT in save.qualities or save.save()
             save = new_kwargs.pop('save', save)
-            return SaveQuality.new(self.id, **new_kwargs)
+            return SaveQuality.new(self.id, save=save, **new_kwargs)
 
 
     def challenge_cap(self, difficulty):
@@ -2152,12 +2152,12 @@ class Entities:
     EntityCls=Entity
 
 
-    def __init__(self, data=None, entities=None, path=None, ss=None,
+    def __init__(self, data=None, entities=None, path=None, ss=None, _ref=None,
                  *eargs, **ekwargs):
         self._entities = {}
         self._order = []
-        self.path = path
-        self.ss = ss
+        self.path = path or (_ref and _ref.path)
+        self.ss   = ss   or (_ref and _ref.ss)
 
         if data is not None:
             for idx, edata in enumerate(data, 1):
@@ -2172,7 +2172,7 @@ class Entities:
     def filter(self, attr, value):
         """Select entities where entity.attr = value"""
         entities=(_ for _ in self if str(getattr(_, attr, "")) == str(value))
-        return self.__class__(path=self.path, ss=self.ss, entities=entities)
+        return self.__class__(_ref=self, entities=entities)
 
 
     def fetch(self, query, partial=False):
@@ -2211,7 +2211,7 @@ class Entities:
             def search(x, s): return x.lower() == s.lower()
         # An idea: elif regex: def search(x, s): return re.search(x, s, re.IGNORECASE)
         entities=(_ for _ in self if search(name, _.name))
-        return self.__class__(path=self.path, ss=self.ss, entities=entities)
+        return self.__class__(_ref=self, entities=entities)
 
 
     def find_by_id(self, eid):
@@ -2220,9 +2220,7 @@ class Entities:
             entity or empty if none was found.
             Unlike .find(), a falsy ID will also return an empty container.
         '''
-        return self.__class__(path=self.path,
-                              ss=self.ss,
-                              entities=(_ for _ in self if _.id == eid))
+        return self.__class__(_ref=self, entities=(_ for _ in self if _.id == eid))
 
 
     def wikitable(self):
@@ -2282,9 +2280,7 @@ class Entities:
         if isinstance(val, int):
             return self._order[val]
         else:
-            return self.__class__(path=self.path,
-                                  ss=self.ss,
-                                  entities=self._order[val])
+            return self.__class__(_ref=self, entities=self._order[val])
 
 
     def __iter__(self):
@@ -2606,6 +2602,11 @@ class SaveQuality:
 
 class SaveQualities(Entities):
     EntityCls = SaveQuality
+
+    def __init__(self, *args, _ref=None, **kwargs):
+        super().__init__(*args, _ref=_ref, **kwargs)
+        self.save = kwargs.get('save') or (_ref and _ref.save)
+
 
     def pretty(self):
         return "\n".join((_.pretty().strip() for _ in self))
