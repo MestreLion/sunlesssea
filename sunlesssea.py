@@ -1170,12 +1170,17 @@ class Effect(QualityOperator):
             if op not in self.operator:
                 continue
             value = self.operator[op]
+            if 'Advanced' in op:
+                evaluated = self._eval_adv(value, save)
+
             if   op == 'OnlyIfAtLeast':
                 if squality.value < value: return
             elif op == 'OnlyIfNoMoreThan':
                 if squality.value > value: return
-            elif op == 'SetToExactly': squality.set_to(value)
-            elif op == 'Level':        squality.increase_by(value)
+            elif op == 'SetToExactly':         squality.set_to(value)
+            elif op == 'SetToExactlyAdvanced': squality.set_to(evaluated)
+            elif op == 'Level':                squality.increase_by(value)
+            elif op == 'ChangeByAdvanced':     squality.increase_by(evaluated)
             else:
                 log.warning("Can not apply effect, operation not implemented: %s", self)
 
@@ -1315,9 +1320,11 @@ class Requirement(QualityOperator):
         for op, value in self.operator.items():
             if op not in self._OPS:
                 continue
-            if   op == 'MinLevel':
+            if 'Advanced' in op:
+                value = self._eval_adv(value, save)
+            if   op in ('MinLevel', 'MinAdvanced'):
                 if squality.value < value: return CheckResult.LOCKED
-            elif op == 'MaxLevel':
+            elif op in ('MaxLevel', 'MaxAdvanced'):
                 if squality.value > value: return CheckResult.LOCKED
             else:
                 log.warning("Can not check requirement, operation not implemented: %s", self)
