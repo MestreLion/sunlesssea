@@ -91,29 +91,32 @@ def main(argv=None):
     log.debug(args)
 
     ss = sunlesssea.SunlessSea()
+    save = ss.autosave  # TODO: Choose via CLI arg instead of hardcoding
 
     if args.naples:
-        naples()
+        naples(save=save)
 
     elif args.antiquarian:
-        antiquarian(args.quality, args.value)
+        antiquarian(args.quality, args.value, save=save)
 
     elif args.value:
-        change(args.quality, args.value, args.add)
+        change(args.quality, args.value, args.add, save=save)
 
     else:
-        for q in sorted(ss.autosave.qualities.find(args.quality), key=lambda _: _.name.lower()):
+        for q in sorted(save.qualities.find(args.quality), key=lambda _: _.name.lower()):
             print(q)
         return
 
     if args.save:
-        ss.autosave.save()
+        save.save()
     else:
         log.info("Test run, not saving. Use --save to apply changes")
 
 
-def change(query, amount, add=False):
-    quality = ss.autosave.qualities.fetch(query, partial=True)
+def change(query, amount, add=False, save=None):
+    if save is None:
+        save = ss.autosave
+    quality = save.qualities.fetch(query, partial=True, add=True)
     value = quality.value  # save old value, for logging purposes
 
     if add:
@@ -125,9 +128,9 @@ def change(query, amount, add=False):
              quality.id, quality.name, value, quality.value, quality.value - value)
 
 
-def naples():
+def naples(save=None):
     def purchase(name, cap=0):
-        squality = ss.autosave.qualities.fetch(name)
+        squality = save.qualities.fetch(name)
         for action in event.actions:
             if squality.quality == action.quality_bought:
                 break
@@ -136,29 +139,36 @@ def naples():
         value = squality.value
         qty = min(max(value, cap or value + free) - value, free)
         log.debug("%s + %s", squality, qty)
-        qty = action.do(qty)
+        qty = action.do(qty, save=save)
         if qty:
             log.info("Purchased %2d x %s: %d => %d",
                      squality.value - value, squality.name, value, squality.value)
         return qty
 
-    event = ss.events.fetch('In Naples')
-    free = ss.autosave.hold - ss.autosave.cargo
+    if save is None:
+        save = ss.autosave
+
+    event = save.ss.events.fetch('In Naples')
+    free = save.hold - save.cargo
     log.debug("Free cargo: %s", free)
     if free <= 0:
         raise sunlesssea.Error("Error in Autosave Cargo/Hold, possibly corrupt: %s/%s",
-                               ss.autosave.cargo, ss.autosave.hold)
+                               save.cargo, save.hold)
     free += 12  # Account for the travel back to Avernus and Cumaen: 11 fuel + 1 supplies
     free -= purchase('Fuel', 21)
     free -= purchase('Supplies')
 
 
-def antiquarian(query, amount):
+def antiquarian(query, amount, save=None):
     if not query:
         raise sunlesssea.Error("QUALITY is required for --antiquarian")
 
-    event = ss.events.fetch('The Alarming Scholar')
-    squality = ss.autosave.qualities.fetch(query, partial=True)
+    if save is None:
+        save = ss.autosave
+
+    event = save.ss.events.fetch('The Alarming Scholar')
+    squality = save.qualities.fetch(query, partial=True)
+
     value = squality.value
     qty = amount or value
 
