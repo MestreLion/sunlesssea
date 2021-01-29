@@ -1326,9 +1326,9 @@ class Requirement(QualityOperator):
             if 'Advanced' in op:
                 value = self._eval_adv(value, save)
             if   op in ('MinLevel', 'MinAdvanced'):
-                if squality.value < value: return CheckResult.LOCKED
+                if squality.effective < value: return CheckResult.LOCKED
             elif op in ('MaxLevel', 'MaxAdvanced'):
-                if squality.value > value: return CheckResult.LOCKED
+                if squality.effective > value: return CheckResult.LOCKED
             else:
                 log.warning("Can not check requirement, operation not implemented: %s", self)
                 return CheckResult.LOCKED
@@ -2643,11 +2643,9 @@ class Save:
 
     @property
     def hold(self):
-        hold = self.qualities.find('hold') or 0
-        if hold:
-            hold = hold[0].value + hold[0].modifier
-        else:
-            log.warning("No 'Hold' quality found in Autosave, maybe it is corrupt?")
+        hold = self.qualities.fetch('Hold', add=True).effective
+        if not hold:
+            log.warning("Hold quality in save is missing set to zero. Is save corrupt?")
         return hold
 
 
