@@ -130,6 +130,17 @@ def iif(cond, trueval, falseval=""):
         return falseval
 
 
+_re_safe_eval = re.compile(r'[ .0-9()*/+-]+')
+def safe_eval(expr):
+    # Largest expression in game data is 63 chars before any substitution
+    if len(expr) <= 50 and '**' not in expr and _re_safe_eval.fullmatch(expr):
+        try:
+            return eval(expr, {'__builtins__': None})
+        except SyntaxError:
+            pass
+    raise Error("Not a valid simple algebraic expression: %r [%s]", expr, len(expr))
+
+
 class Error(Exception):
     """Base class for custom exceptions, with errno and %-formatting for args.
 
@@ -1060,6 +1071,7 @@ class QualityOperator(Entity):
 
 
     def _eval_adv(self, text, save=None):
+        # Idea: self._re_adv.sub(lambda m: f(*m.group('key', 'value')), text)
         if not isinstance(text, str):
             return text
         if save is None:
@@ -1085,12 +1097,8 @@ class QualityOperator(Entity):
 
             # Dice roll
             elif key == 'd':
-                try:
-                    v = int(self._eval_adv(value, save=save))
-                except ValueError as e:
-                    v = 0
-                    log.error("%s in %r: %s", e, self, value)
-                subst = random.randint(1, v) if v else 0
+                v = self._eval_adv(value, save=save)
+                subst = random.randint(1, int(v)) if v else 0
 
             else:
                 log.warn("Unknown %r key when parsing advanced string: %r", key, text)
@@ -1098,6 +1106,8 @@ class QualityOperator(Entity):
             if subst is not None:
                 result = result.replace(mstr, str(subst), 1)
 
+        result = safe_eval(result)
+        log.debug("Evaluated: %s = %s", text, result)
         return result
 
 
