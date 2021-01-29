@@ -24,72 +24,95 @@ log = logging.getLogger(os.path.basename(os.path.splitext(__file__)[0]))
 
 # Add new functions here, moving old ones down
 
+_exprs = (
+        '2+4',
+        '2*4',
+        '1 + 2*3*(4/5) / (6 + -7)',
+        '7 + 9 * (2 - 2)',
+        '6 / 2 + 0.0',
+        '2+3',
+        '6+4/2*2',
+        '3+2.45/8',
+        '3*3*3/3+3',
+)
+def compare_evals():
+    import timeit
+    for f in ('safe_eval', 'simple_eval', 'ast_eval'):
+        print(timeit.timeit(f'for e in _exprs: {f}(e)', globals=globals(), number=20000))
+
 
 def simple_eval_test():
-    for expr, res in (
-        ('2^4',                        6      ),
-        ('2**4',                      16      ),
-        ('1 + 2*3**(4^5) / (6 + -7)', -5.0    ),
-        ('7 + 9 * (2 << 2)',          79      ),
-        ('6 // 2 + 0.0',               3.0    ),
-        ('2+3',                        5      ),
-        ('6+4/2*2',                   10.0    ),
-        ('3+2.45/8',                   3.30625),
-        ('3**3*3/3+3',                30.0    ),
-    ):
+    _eval_tests = (
+            ('2^4',                        6      ),
+            ('2**4',                      16      ),
+            ('1 + 2*3**(4^5) / (6 + -7)', -5.0    ),
+            ('7 + 9 * (2 << 2)',          79      ),
+            ('6 // 2 + 0.0',               3.0    ),
+            ('2+3',                        5      ),
+            ('6+4/2*2',                   10.0    ),
+            ('3+2.45/8',                   3.30625),
+            ('3**3*3/3+3',                30.0    ),
+    )
+    for expr, res in _eval_tests:
         result = simple_eval(expr)
         ok = (result == res and type(result) == type(res))
         print("{} {} = {}".format("OK!" if ok else "FAIL!", expr, result))
+
+
+_re_safe_eval = re.compile(r'[ .0-9()*/+-]+')
+def safe_eval(expr):
+    # Largest expression in game data is 63 chars before any substitution
+    if len(expr) <= 50 and '**' not in expr and _re_safe_eval.fullmatch(expr):
+        try:
+            return eval(expr, {'__builtins__': None})
+        except SyntaxError:
+            pass
+    raise ValueError("Not a valid simple algebraic expression: %r [%s]" % (expr, len(expr)))
+
+
+# https://stackoverflow.com/a/9558001/624066
+def ast_eval(expr):
+    import ast
+    import operator as op
+    # supported operators
+    ops = {ast.USub: op.neg, ast.UAdd: op.pos,
+           ast.Add:  op.add, ast.Sub:  op.sub,
+           ast.Mult: op.mul, ast.Div:  op.truediv}
+    def _eval(node):
+        if isinstance(node, ast.Num): # <number>
+            return node.n
+        elif isinstance(node, ast.BinOp): # <left> <operator> <right>
+            return ops[type(node.op)](_eval(node.left), _eval(node.right))
+        elif isinstance(node, ast.UnaryOp): # <operator> <operand> e.g., -1
+            return ops[type(node.op)](_eval(node.operand))
+        else:
+            raise ValueError("Not a valid simple algebraic expression: %r [%s]" % (expr, len(expr)))
+    return _eval(ast.parse(expr, mode='eval').body)
 
 
 # https://stackoverflow.com/a/65945969/624066
 # Kept outside simple_eval() just for performance
 _re_simple_eval = re.compile(rb'd([\x00-\xFF]+)S\x00')
 def simple_eval(expr):
-    c = compile(expr, 'userinput', 'eval')
-    m = _re_simple_eval.fullmatch(c.co_code)
-    if not m:
-        raise sunlesssea.Error("Not a simple algebraic expression: %s", expr)
-    return c.co_consts[int.from_bytes(m.group(1), sys.byteorder)]
+    try:
+        c = compile(expr, 'userinput', 'eval')
+        m = _re_simple_eval.fullmatch(c.co_code)
+        if m:
+            return c.co_consts[int.from_bytes(m.group(1), sys.byteorder)]
+    except SyntaxError:
+        pass
+    raise ValueError("Not a valid simple algebraic expression: %r [%s]" % (expr, len(expr)))
 
 
 def eval_all():
     # Alternatives:
     # https://pypi.org/project/simpleeval/
     # https://stackoverflow.com/questions/2371436
-    _re_safe_eval = re.compile(r'[.0-9 ()*/+-]+')
-    def safe_eval(expr):
-        if not _re_safe_eval.fullmatch(expr) or '**' in expr:
-            raise sunlesssea.Error("Not a valid simple algebraic expression: %s", expr)
-        return eval(expr, {'__builtins__': None})
-
-    # https://stackoverflow.com/a/9558001/624066
-    def ast_eval(expr):
-        import ast
-        import operator as op
-        # supported operators
-        ops = {ast.USub: op.neg, ast.UAdd: op.pos,
-               ast.Add:  op.add, ast.Sub:  op.sub,
-               ast.Mult: op.mul, ast.Div:  op.truediv}
-        def _eval(node):
-            if isinstance(node, ast.Num): # <number>
-                return node.n
-            elif isinstance(node, ast.BinOp): # <left> <operator> <right>
-                return ops[type(node.op)](_eval(node.left), _eval(node.right))
-            elif isinstance(node, ast.UnaryOp): # <operator> <operand> e.g., -1
-                return ops[type(node.op)](_eval(node.operand))
-            else:
-                raise sunlesssea.Error("Not a valid simple algebraic expression: %s", expr)
-        return _eval(ast.parse(expr, mode='eval').body)
-
     def do_adv(qualop, adv):
-        expr = qualop._eval_adv(adv)
-        res1 = safe_eval(expr)
-        res2 = simple_eval(expr)
-        res3 = ast_eval(expr)
-        if not ((res1 == res2 == res3) and (type(res1) == type(res2) == type(res3))):
-            raise sunlesssea.Error("Not equal: %r = %s = %s = %s", expr, res1, res2, res3)
-        log.debug("%s\n\n", "\n".join((qualop._parse_adv(adv), adv, expr, str(res1))))
+        log.debug(qualop._parse_adv(adv))
+        log.debug(adv)
+        res = qualop._eval_adv(adv)
+        log.debug("%s\n", res)
 
     def do_advs(qualops):
         for qualop in qualops:
@@ -263,12 +286,9 @@ def main():
             return value
     args = [try_int(_) for _ in args]
 
-    try:
-        res = globals()[func](*args)
-        if res is not None:
-            print(repr(res))
-    except TypeError as e:
-        log.error(e)
+    res = globals()[func](*args)
+    if res is not None:
+        print(repr(res))
 
 
 if __name__ == '__main__':
