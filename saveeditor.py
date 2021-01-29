@@ -167,22 +167,22 @@ def antiquarian(query, amount, save=None):
         save = ss.autosave
 
     event = save.ss.events.fetch('The Alarming Scholar')
-    squality = save.qualities.fetch(query, partial=True)
-
-    value = squality.value
-    qty = amount or value
+    quality = save.ss.qualities.fetch(query, partial=True)
 
     for action in event.actions:
-        if squality.quality == action.quality_sold:
+        if quality == action.quality_sold:
             break
     else:
-        raise sunlesssea.Error("No action to sell %s in %s", squality.quality, event)
+        raise sunlesssea.Error("No action to sell %s in %s", quality, event)
 
-    results = action.do(qty, output=list)
+    # Not using an attached SaveQuality, Effect.apply() will create *if* necessary
+    # Hence the need to get updated new value after results, if any.
+    old = quality.fetch_from_save(save=save, add=False).value
+    results = action.do(amount or old, save=save, output=list)
     log.debug(results)
     if len(results):
-        log.info("Sold %2d x %s: %d => %d",
-                 value - squality.value, squality.name, value, squality.value)
+        new = quality.fetch_from_save(save=save, add=False).value
+        log.info("Sold %2d x %s: %d => %d", old - new, quality.name, old, new)
 
 
 if __name__ == '__main__':

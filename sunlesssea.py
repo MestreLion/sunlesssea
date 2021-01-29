@@ -152,6 +152,10 @@ class Error(Exception):
         self.errno = errno
 
 
+class EntityNotFoundError(Error):
+    """Entity was not found, used mostly by Entities.fetch()"""
+
+
 class CheckResult:
     """Enum-like class, attributes used as return value of Requirement.check()
 
@@ -739,7 +743,7 @@ class Quality(Entity):
         return 100.0 / self.difficultyscaler
 
 
-    def to_savequality(self, save=None, add=False, **new_kwargs):
+    def fetch_from_save(self, save=None, add=False, **new_kwargs):
         if save is None:
             save = self.ss.autosave
         squality = save.qualities.get(self.id)
@@ -1085,7 +1089,7 @@ class QualityOperator(Entity):
             # Qualities
             if key in ('q', 'qb'):
                 try:
-                    squality = self.ss.qualities.fetch(value).to_savequality(save=save)
+                    squality = save.ss.qualities.fetch(value).fetch_from_save(save=save)
                     if key == 'q':
                         subst = squality.effective  # Current value
                     else:  # key == 'qb'
@@ -1101,7 +1105,8 @@ class QualityOperator(Entity):
                 subst = random.randint(1, int(v)) if v else 0
 
             else:
-                log.warn("Unknown %r key when parsing advanced string: %r", key, text)
+                log.warn("Unknown key %r when parsing advanced string %r in %r",
+                         key, value, text)
 
             if subst is not None:
                 result = result.replace(mstr, str(subst), 1)
@@ -1163,9 +1168,7 @@ class Effect(QualityOperator):
     def apply(self, save=None):
         if save is None:
             save = self.ss.autosave
-        squality = save.qualities.get(self.quality.id)
-        if not squality:
-            squality = save.add_quality(self.quality)
+        squality = self.quality.fetch_from_save(save=save, add=True)
         for op in reversed(self._OPS):
             if op not in self.operator:
                 continue
@@ -1316,7 +1319,7 @@ class Requirement(QualityOperator):
     def check(self, save=None):
         if save is None:
             save = self.ss.autosave
-        squality = save.qualities.get(self.quality.id) or SaveQuality.new(self.quality.id)
+        squality = self.quality.fetch_from_save(save=save, add=False)
         for op, value in self.operator.items():
             if op not in self._OPS:
                 continue
@@ -1905,7 +1908,7 @@ class Action(BaseEvent):
         if save is None:
             save = self.ss.autosave
         results = []
-        for _ in range(repeats):
+        for _ in range(repeats):  # Works for repeats <=0
             # Check Requirements
             result = self.check(save=save)
             if not result:
@@ -2176,7 +2179,7 @@ class Entities:
         entities = self.find(query, partial=partial)
         found = len(entities)
         if not found:
-            raise Error("No %s matching %r", self.EntityCls.__name__, query)
+            raise EntityNotFoundError("No %s matching %r", self.EntityCls.__name__, query)
         if found > 1:
             raise Error("%s match '%s':\n\t%s",
                         entities, query, "\n\t".join(str(_) for _ in entities))
@@ -2606,6 +2609,18 @@ class SaveQualities(Entities):
 
     def pretty(self):
         return "\n".join((_.pretty().strip() for _ in self))
+
+
+    def fetch(self, query, partial=False, add=False):
+        """Find a single SaveQuality, raise Error if none or multiple found"""
+        try:
+            return super().fetch(query, partial=partial)
+        except EntityNotFoundError:
+            pass
+
+        # Craft a new one from a Quality, if it exists
+        return (self.save.ss.qualities.fetch(query, partial=partial)
+                    .fetch_from_save(save=self.save, add=add))
 
 
 
