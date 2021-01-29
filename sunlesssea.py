@@ -755,6 +755,7 @@ class Quality(Entity):
             return save.add_quality(self.id, **new_kwargs)
         else:
             # Create a new, fully detached one: NOT in save.qualities or save.save()
+            save = new_kwargs.pop('save', save)
             return SaveQuality.new(self.id, **new_kwargs)
 
 
@@ -2338,7 +2339,6 @@ class Events(Entities):
 
     def at(self, lid=0, name=""):
         '''Return Events by location ID or name'''
-        #TODO: use self.ss.locations.find(query) to greatly simplify this
         return Events(ss=self.ss,
                       entities=(_ for _
                                 in self
@@ -2375,21 +2375,21 @@ class SaveQuality:
         "Id": 0
     }
 
-    def __init__(self, data=None, idx=0, save=None, ss=None):
-        self._data = data
-        self.idx   = idx
-        self.ss    = ss
+    def __init__(self, data, save, idx=0, ss=None):  # @UnusedVariable
+        # ss is ignored, save.ss used instead, argument is to satisfy Entities
+        self._data = data or self.TEMPLATE.copy()
         self.save  = save
+        self.idx   = idx or len(self.save.qualities) + 1,
 
         # Find and assign the associated Quality
         qid  = self._data['AssociatedQualityId']
         self.quality  = None
-        if self.ss and self.ss.qualities:
-            self.quality = self.ss.qualities.get(qid)
+        if self.save.ss:
+            self.quality = self.save.ss.qualities.get(qid)
             if not self.quality:
                 # Create a dummy one
                 self.quality = Quality(data={'Id': qid, 'Name':''},
-                                       ss=self.ss)
+                                       ss=self.save.ss)
                 log.warning("Could not find Quality for %r[%d]: %d",
                             save, idx, qid)
 
@@ -2406,8 +2406,8 @@ class SaveQuality:
         # as SaveQuality is NOT a Quality.
         self.equipped = None
         qid = (self._data['EquippedPossession'] or {}).get('AssociatedQualityId', 0)
-        if qid and self.ss and self.ss.qualities:
-            self.equipped = self.ss.qualities.get(qid)
+        if qid and self.save.ss:
+            self.equipped = self.save.ss.qualities.get(qid)
 
             if not self.equipped:
                 # Create a dummy one
@@ -2503,7 +2503,7 @@ class SaveQuality:
 
 
     @classmethod
-    def new(cls, qid, idx=0, save=None, ss=None, level=0, modifier=0, name=None):
+    def new(cls, qid, save, level=0, modifier=0, name=None):
         # XP and EquippedPossession are is intentionally left out, for now.
         data = cls.TEMPLATE.copy()
         data.update({
@@ -2514,7 +2514,7 @@ class SaveQuality:
         })
         # It's tempting to add data to save._data here, but as this is a private
         # attribute, let this to Save
-        return SaveQuality(data=data, idx=idx, save=save, ss=ss)
+        return SaveQuality(data=data, save=save)
 
 
     def increase_by(self, value=1):
@@ -2612,20 +2612,25 @@ class SaveQualities(Entities):
 
 
     def fetch(self, query, partial=False, add=False):
-        """Find a single SaveQuality, raise Error if none or multiple found"""
+        """Find a single SaveQuality or create a new one based on query.
+
+        Raise NotFoundError if no suitable Quality is found with query.
+        """
         try:
             return super().fetch(query, partial=partial)
         except EntityNotFoundError:
             pass
 
-        # Craft a new one from a Quality, if it exists
+        # Craft a new one from a Quality, if it exists,
+        # Quality.fetch_from_save() will perform a redundant round-trip by calling
+        # back SaveQuality.get(quality.id) with no result, but that's fine
         return (self.save.ss.qualities.fetch(query, partial=partial)
                     .fetch_from_save(save=self.save, add=add))
 
 
 
 class Save:
-    def __init__(self, data=None, ss=None, path=None):
+    def __init__(self, data, ss, path=None):
         self._data = data
         self.path  = path
         self.ss    = ss
@@ -2652,9 +2657,7 @@ class Save:
     def add_quality(self, qid, level=0, modifier=0, name=None):
         quality = SaveQuality.new(
             qid      = qid,
-            idx      = len(self.qualities) + 1,
             save     = self,
-            ss       = self.ss,
             level    = level,
             modifier = modifier,
             name     = name
