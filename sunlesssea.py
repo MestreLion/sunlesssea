@@ -47,15 +47,13 @@
 #    or even "Description" (think about SAY) [PARTIALLY DONE, can be smarter]
 # - Improve (or even completely deprecate) format_obj using better .format()
 #    specs and ideas from http://code.activestate.com/recipes/577227/
-# - Improve SaveQualities/SaveQuality: Better pretty/bare, proper idx on .wiki()
+# - Improve SaveQualities/SaveQuality: Better pretty/bare
 # - Take a look on _IGNORED/OPTIONAL_FIELDS, and parse more of them.
-# - Revamp QualityOperator._format() the same way done in Requirement.
-#   - Also, either move to Effects (good) or unify them both (possibly not viable)
+# - Revamp Effect._format(), try to unify with Requirement _format() or _tokenize()
 # - Create a ShipSlots hardcoded mapping table, recreating game DLL data
 # - class Dummy with __bool__() returning False, each class has a dummy counterpart,
 #   inheriting from both itself and Dummy, all instance attributes as class attributes,
 #   falsy value, no specialized methods. To be used as return value instead of None
-# - Implement challenges in Requirement.check()
 # - Fix Outcome.label/__str__()/re.sub() madness, and create a proper __repr__()
 # - Result values from Requirement.check()/Action.do() are messy.
 # - For all child classes, self.ss should be a property returning parent.ss
@@ -128,6 +126,13 @@ def iif(cond, trueval, falseval=""):
         return trueval
     else:
         return falseval
+
+
+def check_random(chance):
+    return random.randrange(100) < chance
+
+def dice(num):
+    return random.randint(1, int(num)) if num > 1 else 1  # needs int, num can be float
 
 
 _re_safe_eval = re.compile(r'[ .0-9()*/+-]+')
@@ -621,7 +626,7 @@ class Entity:
 
         def parse_d(key, value):  # @UnusedVariable
             v = int(value) if value.isdigit() else self._eval_adv(value, save=save)
-            return random.randint(1, int(v)) if v > 1 else 1  # needs int, v can be float
+            return dice(v)
 
         def parse_nokey(key, value):  # @UnusedVariable
             return 0
@@ -1292,7 +1297,7 @@ class Effect(QualityOperator):
 
 
 class Requirement(QualityOperator):
-    # Order is important for ._format()!
+    # Order is important for ._format() and .check()!
     _OPS = (
         'DifficultyLevel',
         'DifficultyAdvanced',
@@ -1319,15 +1324,30 @@ class Requirement(QualityOperator):
         if save is None:
             save = self.ss.autosave
         squality = self.quality.fetch_from_save(save=save)
-        for op, value in self.operator.items():
-            if op not in self._OPS:
+        for op in reversed(self._OPS):
+            if op not in self.operator:
                 continue
+            value = self.operator[op]
             if 'Advanced' in op:
                 value = self._eval_adv(value, save=save)
+
             if   op in ('MinLevel', 'MinAdvanced'):
                 if squality.effective < value: return CheckResult.LOCKED
             elif op in ('MaxLevel', 'MaxAdvanced'):
                 if squality.effective > value: return CheckResult.LOCKED
+            elif op in ('DifficultyLevel', 'DifficultyAdvanced'):
+                chance = squality.challenge_chance(value)
+                result = squality.check_challenge(value)
+                if self.quality.is_luck:
+                    log.info("You were %s a %.0d%% chance challenge!",
+                             "lucky and SUCCEEDED" if result else "unlucky and FAILED",
+                             chance)
+                else:
+                    log.info("Your %s %d %s a %.0d%% chance challenge!",
+                             squality.name, squality.effective,
+                             "SUCCEEDED" if result else "FAILED",
+                             chance)
+                return CheckResult.SUCCESS if result else CheckResult.FAILURE
             else:
                 log.warning("Can not check requirement, operation not implemented: %s", self)
                 return CheckResult.LOCKED
@@ -1928,7 +1948,7 @@ class Action(BaseEvent):
             rare = self._outdict.get('Rare{}'.format(otype))
             # Choose outcome
             if rare:
-                if random.randrange(100) < rare.chance:
+                if check_random(rare.chance):
                     # Rare
                     outcome = rare
                     result = rare.type.replace("Event", "")
@@ -2538,6 +2558,19 @@ class SaveQuality:
                             self.pyramid_limit, self, xp)
 
 
+    def challenge_chance(self, value):
+        cap = self.quality.challenge_cap(value)
+        if self.quality.is_luck:
+            return cap
+        return 100 * min(1, self.effective / (cap or 1))
+
+    def check_challenge(self, value):
+        chance = self.challenge_chance(value)
+        if chance >= 100:
+            return True
+        return check_random(chance)
+
+
     def dump(self):
         return self._data
 
@@ -2569,6 +2602,7 @@ class SaveQuality:
             "* <nowiki>{repr}</nowiki>\n"
             "* {wiki}\n",
             self, name=self.name, wiki=self.wiki(), repr=repr(self))
+
 
     def __str__(self):
         capstr = iif(self.quality.cap, "/{}".format(self.quality.cap))

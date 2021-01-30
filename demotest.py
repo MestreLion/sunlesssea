@@ -24,6 +24,23 @@ log = logging.getLogger(os.path.basename(os.path.splitext(__file__)[0]))
 
 # Add new functions here, moving old ones down
 
+def check_challenges():
+    for event in ss.events:
+        for action in event.actions:
+            for requirement in action.requirements:
+                if ('DifficultyLevel'    in requirement.operator or
+                    'DifficultyAdvanced' in requirement.operator):
+                    print(requirement)
+                    requirement.check()
+
+def check_luck():
+    event = ss.events.fetch('In Naples')
+    for action in event.actions:
+        for requirement in action.requirements:
+            if requirement.quality.is_luck:
+                print(requirement)
+                requirement.check()
+
 _exprs = (
         '2+4',
         '2*4',
@@ -139,10 +156,10 @@ def eval_test():
             break
 
 
-def choose(chance, i=10000):
+def check_random(chance, i=10000):
     a = 0
     for _ in range(i):
-        if random.choices('ab', cum_weights=(chance, 100))[0] == 'a':
+        if random.randrange(100) < chance:
             a += 1
     print(f'{a / i:.2%}')
 
