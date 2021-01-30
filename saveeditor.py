@@ -57,6 +57,14 @@ def parse_args(argv=None):
                         help="Buy Fuel up to 21 and Supplies up to remaining Hold  "
                         " as if in Naples (Surface), already accounting for trip back.")
 
+    group.add_argument('-S', '--sunlight', '--avernus',
+                        type=int,
+                        nargs='?',
+                        metavar='QTY',
+                        help="Fill up to %(metavar)s Empty Mirrorcatch Boxes"
+                            " with Sunlight as if in Avernus (Surface)."
+                            " Leave %(metavar)s blank to fill all empty boxes.")
+
     group.add_argument('-A', '--antiquarian', '--alarming-scholar',
                         default=False,
                         action="store_true",
@@ -95,6 +103,9 @@ def main(argv=None):
 
     if args.naples:
         naples(save=save)
+
+    elif args.sunlight is not None:
+        sunlight(args.sunlight, save=save)
 
     elif args.antiquarian:
         antiquarian(args.quality, args.value, save=save)
@@ -157,6 +168,22 @@ def naples(save=None):
     free += 12  # Account for the travel back to Avernus and Cumaen: 11 fuel + 1 supplies
     free -= purchase('Fuel', 21)
     free -= purchase('Supplies')
+
+
+def sunlight(qty=0, save=None):
+    event  = save.ss.events.fetch('Avernus')
+    boxes  = save.qualities.fetch('Empty Mirrorcatch Box')
+    sunlit = save.qualities.fetch('Sunlight-Filled Mirrorcatch Box')
+    qty = qty or boxes.value
+    for action in event.actions:
+        if boxes.quality in (_.quality for _ in action.requirements):
+            break
+    else:
+        raise sunlesssea.Error("No action to fill %s in Avernus", boxes.name)
+
+    qty = action.do(qty, save=save)
+    if qty:
+        log.info("Filled %d boxes:\n\t%s\n\t%s", qty, boxes, sunlit)
 
 
 def antiquarian(query, amount, save=None):
