@@ -177,11 +177,11 @@ def antiquarian(query, amount, save=None):
 
     # Not using an attached SaveQuality, Effect.apply() will create *if* necessary
     # Hence the need to get updated new value after results, if any.
-    old = quality.fetch_from_save(save=save, add=False).value
+    old = quality.fetch_from_save(save=save).value
     results = action.do(amount or old, save=save, output=list)
     log.debug(results)
     if len(results):
-        new = quality.fetch_from_save(save=save, add=False).value
+        new = quality.fetch_from_save(save=save).value
         log.info("Sold %2d x %s: %d => %d", old - new, quality.name, old, new)
 
 

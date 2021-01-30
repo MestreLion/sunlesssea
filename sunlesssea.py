@@ -1175,7 +1175,7 @@ class Effect(QualityOperator):
                 continue
             value = self.operator[op]
             if 'Advanced' in op:
-                evaluated = self._eval_adv(value, save)
+                evaluated = self._eval_adv(value, save=save)
 
             if   op == 'OnlyIfAtLeast':
                 if squality.value < value: return
@@ -1320,12 +1320,12 @@ class Requirement(QualityOperator):
     def check(self, save=None):
         if save is None:
             save = self.ss.autosave
-        squality = self.quality.fetch_from_save(save=save, add=False)
+        squality = self.quality.fetch_from_save(save=save)
         for op, value in self.operator.items():
             if op not in self._OPS:
                 continue
             if 'Advanced' in op:
-                value = self._eval_adv(value, save)
+                value = self._eval_adv(value, save=save)
             if   op in ('MinLevel', 'MinAdvanced'):
                 if squality.effective < value: return CheckResult.LOCKED
             elif op in ('MaxLevel', 'MaxAdvanced'):
