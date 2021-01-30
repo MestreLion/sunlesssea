@@ -811,7 +811,11 @@ class Quality(Entity):
         if self.is_luck:
             return 50 - difficulty * self.difficultyscaler
 
-        return (int(math.ceil(difficulty * self.difficulty_factor)))
+        # Undercrow: Dying Grace, Low Barnet: Storyteller, Cladery Souvenir
+        if self.difficultytesttype == 1:
+            return int((50 / self.difficultyscaler) + difficulty)
+
+        return int(math.ceil(difficulty * self.difficulty_factor))
 
 
     def status_for(self, value):
