@@ -141,6 +141,23 @@ def safe_eval(expr):
     raise Error("Not a valid simple algebraic expression: %r [%s]", expr, len(expr))
 
 
+_re_advanced = re.compile('\[(?P<key>[a-z]+):(?P<value>(?:[^][]+|\[[^][]+])+)]')
+def parse_advanced(text, parsers):
+    def parse(match):
+        mstr, (key, value) = match.group(), match.group('key', 'value')
+        if key not in parsers:
+            log.warn("Unknown key %r when parsing advanced string %r in %r",
+                     key, mstr, text)
+            key = '_'
+        return str(parsers[key](key, value))
+    while True:
+        result = re.sub(_re_advanced, parse, text)
+        if result == text:
+            break
+        text = result
+    return result
+
+
 class Error(Exception):
     """Base class for custom exceptions, with errno and %-formatting for args.
 
@@ -525,10 +542,11 @@ class Entity:
         return repr(text)
 
 
-    def _parse_adv(self, text, qfmt="[{name}]", qbfmt="[Base {name}]", dfmt="[1 to {}]",
-                   noqfmt="[Quality({})]", qnamefmt="{{{}}}"):
-        '''
-        Parse "Advanced" strings containing references to entities in [k:v] format
+    def _parse_adv(self, text,
+                  qfmt="[{name}]", qbfmt="[Base {name}]", dfmt="[1 to {}]",
+                  noqfmt="[Quality({})]", qnamefmt="{{{}}}"
+    ):
+        """Parse "Advanced" strings containing references to entities in [k:v] format.
 
         Current references are:
         [q:ID]   - Quality by ID, return its current effective value, i.e.,
@@ -541,13 +559,13 @@ class Entity:
         [d:[q:ID]] - Dice roll, 1 to Quality(ID).Level
 
         No other nestings are found, only combinations and expressions:
-        "[d:[q:108665]] - [d:5] - (100 * [q:112904])"
+        "[d:[q:108665]+10] - [d:5] - (100 * [q:112904])"
 
         Altough not used, this method also supports nesting combos such as:
         "OK [d:99+[q:102898]+2*[q:112904]+10], [q:123], [q:something], [k:foo]"
 
         Parameters:
-            opstr: String being searched for references
+            text:     String being searched for references
             qfmt:     Formatting string for Qualities looked up by ID.
                         Use Quality attribute names such as '{name}', '{id}'.
                         '{str}' for str(Quality) and '{repr}' for its repr()
@@ -556,47 +574,69 @@ class Entity:
                         '{}' for the ID
             qnamefmt: Formatting string for Quality name. No Qualities lookup
                         is actually performed. '{}' for the name content.
-        '''
-        if not isinstance(text, str):
-            return text
+        """
+        def parse_q(key, value):
+            # By name, used in many Descriptions and in some Names
+            # Key 'qb' is never used with names, so no need for a 'qbnamefmt'
+            if not value.isdigit():
+                return qnamefmt.format(value)
+            # By ID, used in Requirements and Effects
+            quality = self.ss.qualities.get(int(value))
+            if quality:
+                return format_obj(qbfmt if key == 'qb' else qfmt,
+                                  quality, quality=quality)
+            # Quality not found
+            log.warning("Quality(%s) not found, referenced in %r: %s", value, self, text)
+            return noqfmt.format(value)
 
-        result = text
-        for match in re.finditer(self._re_adv, text):
-            mstr, (key, value) = match.group(), match.group('key', 'value')
-            subst = None
-            quality = None
+        def parse_d(key, value):  # @UnusedVariable
+            return dfmt.format(parse_advanced(value, parsers))
 
-            # Qualities
-            if key in ('q', 'qb'):
-                # By ID, used in Requirements and Effects
-                if value.isdigit():
-                    if self.ss and self.ss.qualities:
-                        quality = self.ss.qualities.get(int(value))
-                    if quality:
-                        subst = format_obj(qbfmt if key == 'qb' else qfmt,
-                                           quality, quality=quality)
-                    else:
-                        subst = noqfmt.format(value)
-                        log.warning("Could not find Quality ID %s for %r in %r",
-                                    value, self, text)
-                # By name, used in many Descriptions and in some Names
-                else:
-                    # Key 'qb' is never used with names, so only qnamefmt is used
-                    subst = qnamefmt.format(value)
+        def parse_nokey(key, value):  # @UnusedVariable
+            return value
 
-            # Dice roll
-            elif key == 'd':
-                subst = dfmt.format(self._parse_adv(value, qfmt, qbfmt, dfmt,
-                                                    noqfmt, qnamefmt))
+        parsers = {
+            'q':  parse_q,
+            'qb': parse_q,
+            'd':  parse_d,
+            '_':  parse_nokey,
+        }
+        return parse_advanced(text, parsers)
 
-            else:
-                log.warn("Unknown %r key when parsing advanced string: %r",
-                         key, text)
 
-            if subst:
-                result = result.replace(mstr, subst, 1)
+    def _eval_adv(self, text, save=None):
+        """Parse Advanced strings, evaluating expressions using values from save.
 
-        return result
+        Return type is always numeric, either int or float.
+        """
+        def parse_q(key, value):
+            try:
+                squality = save.qualities.fetch(value)
+            except EntityNotFoundError:
+                log.warning("Quality(%r) not found, referenced in %r."
+                            " Assuming a zero value.", value, self)
+                return 0
+            if    key == 'q':  return squality.effective  # Current value
+            else:              return squality.value      # Base value
+
+        def parse_d(key, value):  # @UnusedVariable
+            v = int(value) if value.isdigit() else self._eval_adv(value, save=save)
+            return random.randint(1, int(v)) if v > 1 else 1  # needs int, v can be float
+
+        def parse_nokey(key, value):  # @UnusedVariable
+            return 0
+
+        parsers = {
+            'q':  parse_q,
+            'qb': parse_q,
+            'd':  parse_d,
+            '_':  parse_nokey,
+        }
+        if save is None:
+            save = self.ss.autosave
+        result = parse_advanced(text, parsers)
+        log.debug("Parsed: %s => %s", text, result)
+        return safe_eval(result)
 
 
     def __lt__(self, other):
@@ -1075,48 +1115,6 @@ class QualityOperator(Entity):
         )
 
 
-    def _eval_adv(self, text, save=None):
-        # Idea: self._re_adv.sub(lambda m: f(*m.group('key', 'value')), text)
-        if not isinstance(text, str):
-            return text
-        if save is None:
-            save = self.ss.autosave
-
-        result = text
-        for match in re.finditer(self._re_adv, text):
-            mstr, (key, value) = match.group(), match.group('key', 'value')
-            subst = None
-
-            # Qualities
-            if key in ('q', 'qb'):
-                try:
-                    squality = save.ss.qualities.fetch(value).fetch_from_save(save=save)
-                    if key == 'q':
-                        subst = squality.effective  # Current value
-                    else:  # key == 'qb'
-                        subst = squality.value      # Base value
-                except Error:
-                    subst = 0                       # Quality not found
-                    log.warning("Could not find SaveQuality(%s) for %r in %r,"
-                                " assuming its value is 0", value, self, text)
-
-            # Dice roll
-            elif key == 'd':
-                v = self._eval_adv(value, save=save)
-                subst = random.randint(1, int(v)) if v else 0
-
-            else:
-                log.warn("Unknown key %r when parsing advanced string %r in %r",
-                         key, value, text)
-
-            if subst is not None:
-                result = result.replace(mstr, str(subst), 1)
-
-        result = safe_eval(result)
-        log.debug("Evaluated: %s = %s", text, result)
-        return result
-
-
     def _format(self, *args, **kwargs):
         raise NotImplementedError
 
@@ -1435,8 +1433,9 @@ class Requirement(QualityOperator):
         for optype, value, op, _, advanced, args, kwargs in tokens:
             if advanced:
                 value = parse_adv(value)
-                args = tuple(parse_adv(_) for _ in args)
-                kwargs = {_:parse_adv(kwargs[_]) for _ in kwargs}
+                args = tuple((parse_adv(_)  if isinstance(_,  str) else _) for _ in args)
+                kwargs = {_k:(parse_adv(_v) if isinstance(_v, str) else _v)
+                          for _k, _v in kwargs.items()}
 
             elif showstatus and optype in statusops:
                 value = add_status(value)

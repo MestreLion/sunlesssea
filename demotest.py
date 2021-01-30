@@ -110,9 +110,8 @@ def eval_all():
     # https://stackoverflow.com/questions/2371436
     def do_adv(qualop, adv):
         log.debug(qualop._parse_adv(adv))
-        log.debug(adv)
-        res = qualop._eval_adv(adv)
-        log.debug("%s\n", res)
+        res = qualop._eval_adv(adv)  # Will trigger some debug logs
+        log.info("%s\n", res)
 
     def do_advs(qualops):
         for qualop in qualops:
