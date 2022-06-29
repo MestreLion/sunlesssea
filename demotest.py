@@ -13,11 +13,12 @@ import random
 import re
 import os
 import sys
+import typing as t
 
 import sunlesssea
 
 
-ss = None
+ss: t.Optional[sunlesssea.SunlessSea] = None
 
 log = logging.getLogger(os.path.basename(os.path.splitext(__file__)[0]))
 
@@ -29,9 +30,11 @@ def check_challenges():
         for action in event.actions:
             for requirement in action.requirements:
                 if ('DifficultyLevel'    in requirement.operator or
-                    'DifficultyAdvanced' in requirement.operator):
+                    'DifficultyAdvanced' in requirement.operator
+                ):
                     print(requirement)
                     requirement.check()
+
 
 def check_luck():
     event = ss.events.fetch('In Naples')
@@ -40,6 +43,7 @@ def check_luck():
             if requirement.quality.is_luck:
                 print(requirement)
                 requirement.check()
+
 
 _exprs = (
         '2+4',
@@ -60,15 +64,15 @@ def compare_evals():
 
 def simple_eval_test():
     _eval_tests = (
-            ('2^4',                        6      ),
-            ('2**4',                      16      ),
-            ('1 + 2*3**(4^5) / (6 + -7)', -5.0    ),
-            ('7 + 9 * (2 << 2)',          79      ),
-            ('6 // 2 + 0.0',               3.0    ),
-            ('2+3',                        5      ),
-            ('6+4/2*2',                   10.0    ),
+            ('2^4',                        6),
+            ('2**4',                      16),
+            ('1 + 2*3**(4^5) / (6 + -7)', -5.0),
+            ('7 + 9 * (2 << 2)',          79),
+            ('6 // 2 + 0.0',               3.0),
+            ('2+3',                        5),
+            ('6+4/2*2',                   10.0),
             ('3+2.45/8',                   3.30625),
-            ('3**3*3/3+3',                30.0    ),
+            ('3**3*3/3+3',                30.0),
     )
     for expr, res in _eval_tests:
         result = simple_eval(expr)
@@ -76,7 +80,7 @@ def simple_eval_test():
         print("{} {} = {}".format("OK!" if ok else "FAIL!", expr, result))
 
 
-_re_safe_eval = re.compile(r'[ .0-9()*/+-]+')
+_re_safe_eval = re.compile(r'[ .\d()*/+-]+')
 def safe_eval(expr):
     # Largest expression in game data is 63 chars before any substitution
     if len(expr) <= 50 and '**' not in expr and _re_safe_eval.fullmatch(expr):
@@ -95,12 +99,14 @@ def ast_eval(expr):
     ops = {ast.USub: op.neg, ast.UAdd: op.pos,
            ast.Add:  op.add, ast.Sub:  op.sub,
            ast.Mult: op.mul, ast.Div:  op.truediv}
+
+    # noinspection PyTypeChecker
     def _eval(node):
-        if isinstance(node, ast.Num): # <number>
+        if isinstance(node, ast.Num):  # <number>
             return node.n
-        elif isinstance(node, ast.BinOp): # <left> <operator> <right>
+        elif isinstance(node, ast.BinOp):  # <left> <operator> <right>
             return ops[type(node.op)](_eval(node.left), _eval(node.right))
-        elif isinstance(node, ast.UnaryOp): # <operator> <operand> e.g., -1
+        elif isinstance(node, ast.UnaryOp):  # <operator> <operand> e.g., -1
             return ops[type(node.op)](_eval(node.operand))
         else:
             raise ValueError("Not a valid simple algebraic expression: %r [%s]" % (expr, len(expr)))
@@ -174,14 +180,14 @@ def gamenote():
 
 def printqualop(qualop):
     """Old testing for Requirements and Effects and Advanced parsing"""
-    #[q:120917]+[q:120960]+[d:[q:120959]]
+    # [q:120917]+[q:120960]+[d:[q:120959]]
     print("REPR:\t{}".format(repr(qualop)))
     print(u"STR:\t{}".format(qualop))
     print(u"PRETTY:\t{}".format(qualop.pretty()))
     print(u"WIKI:\t{}".format(qualop.wiki()))
     print("")
 
-    #TODO: These were meant as distinct functions. Make it so!
+    # TODO: These were meant as distinct functions. Make it so!
 #     try:
 #         args = sys.argv[1]
 #     except Exception:
@@ -223,8 +229,8 @@ def equipable():
     """Print owned equipable qualities (Ship Equipment and Officers) and their slots"""
     for item in ss.autosave.qualities:
         q = item.quality
+        # if q.category in (200, 106) and item.value > 0:  # Cargo, officers
         if q.assign and item.value > 0:
-        #if q.category in (200, 106) and item.value > 0:  # Cargo, officers
             print(item, "({0.id} {0.name})".format(q.assign))
 
 
@@ -310,5 +316,5 @@ def main():
 if __name__ == '__main__':
     try:
         sys.exit(main())
-    except sunlesssea.Error as e:
-        log.error(e)
+    except sunlesssea.Error as err:
+        log.error(err)

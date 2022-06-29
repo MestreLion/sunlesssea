@@ -98,8 +98,6 @@ ENTITIES = {
 }
 
 
-
-
 ################################################################################
 # General helper functions
 
@@ -111,14 +109,13 @@ def format_obj(fmt, obj, *args, **kwargs):
 
 
 def indent(text, level=1, pad='\t'):
-    '''Indent a text. As a side-effect it also strip trailing whitespace,
+    """Indent a text. As a side-effect it also strip trailing whitespace,
         even for level = 0
-    '''
+    """
     if not level:
         return text.rstrip()
-    indent = level * pad
-    return "{}{}".format(indent,
-                         ('\n'+indent).join(text.rstrip().split('\n')))
+    i = level * pad
+    return "{}{}".format(i, ('\n'+i).join(text.rstrip().split('\n')))
 
 
 def iif(cond, trueval, falseval=""):
@@ -151,8 +148,8 @@ def parse_advanced(text, parsers):
     def parse(match):
         mstr, (key, value) = match.group(), match.group('key', 'value')
         if key not in parsers:
-            log.warn("Unknown key %r when parsing advanced string %r in %r",
-                     key, mstr, text)
+            log.warning("Unknown key %r when parsing advanced string %r in %r",
+                        key, mstr, text)
             key = '_'
         return str(parsers[key](key, value))
     while True:
@@ -255,8 +252,8 @@ def parse_args(argv=None):
                         choices=('bare', 'dump', 'json', 'pretty', 'wiki', 'wikipage'),
                         default='pretty',
                         help="Output format. 'wiki' is awesome!"
-                            " Available formats: [%(choices)s]."
-                            " [Default: %(default)s]")
+                             " Available formats: [%(choices)s]."
+                             " [Default: %(default)s]")
 
     parser.add_argument('-a', '--attribute',
                         nargs=2,
@@ -283,14 +280,14 @@ def parse_args(argv=None):
                         default='event',
                         nargs='?',
                         help="Entity to work on."
-                            " Available entities: {}."
-                            " [Default: %(default)s]".format(list(ENTITIES)))
+                             " Available entities: {}."
+                             " [Default: %(default)s]".format(list(ENTITIES)))
 
     parser.add_argument(dest='filter',
                         nargs='?',
                         metavar="MATCH",
                         help="Match entities by numerical ID or name"
-                            " (partial, case-insentitive).")
+                             " (partial, case-insentitive).")
 
     args = parser.parse_args(argv)
     args.debug = args.loglevel == logging.DEBUG
@@ -387,24 +384,23 @@ def main(argv=None):
     return
 
 
-
 ################################################################################
 # Classes
 
 class Entity:
-    '''Base class for an Entity
+    """Base class for an Entity
         Subclasses MAY override or extend _REQUIRED_FIELDS, and MAY override
         _OPTIONAL_FIELDS and _IGNORED_FIELDS
-    '''
+    """
 
-    _ENTITY_FIELDS    = set(("Id", "Name", "Description", "Image"))
-    _ENTITY_REQUIRED  = set(("Id",))
+    _ENTITY_FIELDS    = {"Id", "Name", "Description", "Image"}
+    _ENTITY_REQUIRED  = {"Id"}
 
     _REQUIRED_FIELDS  = set(_ENTITY_FIELDS)
     _OPTIONAL_FIELDS  = set()  # Converted to attributes using default values
     _IGNORED_FIELDS   = set()  # No attributes created
 
-    _re_gamenote = re.compile('\[([^\]]+)]"?$')
+    _re_gamenote = re.compile('\[([^]]+)]"?$')
     _re_adv = re.compile('\[(?P<key>[a-z]+):(?P<value>(?:[^][]+|\[[^][]+])+)]')
 
 
@@ -438,12 +434,11 @@ class Entity:
                       self._OPTIONAL_FIELDS |
                       self._IGNORED_FIELDS)
         if f:
-            log.warn("%r contains UNKNOWN fields: %s",
-                      self, ", ".join(sorted(f)))
+            log.warning("%r contains UNKNOWN fields: %s",
+                        self, ", ".join(sorted(f)))
 
         if not self.ss:
             log.error("%r has no reference to a SunlessSea instance", self)
-
 
     @property
     def etype(self):
@@ -489,21 +484,17 @@ class Entity:
             return match.group(1)
         return ""
 
-
     def dump(self):
         return self._data
 
-
     def to_json(self):
         return json.dumps(self._data, indent=4, separators=(',',':'))
-
 
     def bare(self, sep='\t'):
         if self.name:
             return "{}{}{}".format(self.id, sep, self.name)
         else:
             return str(self.id)
-
 
     def pretty(self, short=False):
         pretty = "{:d}".format(self.id)
@@ -512,13 +503,11 @@ class Entity:
         if self.description and not short:
             # Trailing '\n' is intentional, blank line after Description
             pretty += "\n\t{}\n".format(self.description_pretty)
-        #pretty += "\n"
+        # pretty += "\n"
         return pretty
-
 
     def wiki(self):
         return self.name_wiki or str(self.id)
-
 
     def wikirow(self):
         return format_obj(
@@ -530,7 +519,6 @@ class Entity:
             "| {description_wiki}\n",
             self)
 
-
     def wikipage(self):
         return format_obj(
             "=={name_wiki}==\n"
@@ -538,9 +526,8 @@ class Entity:
             "* {wiki}\n",
             self, wiki=self.wiki(), repr=repr(self))
 
-
     def _pretty_text(self, text, cut=120, elipsis="(...)"):
-        '''Quotes and limits a text, replacing control characters'''
+        """Quotes and limits a text, replacing control characters"""
         if cut and len(text) > cut:
             text = text[:cut-len(elipsis)] + "(...)"
         # repr() quotes and fixes \n, \r
@@ -594,10 +581,12 @@ class Entity:
             log.warning("Quality(%s) not found, referenced in %r: %s", value, self, text)
             return noqfmt.format(value)
 
-        def parse_d(key, value):  # @UnusedVariable
+        # noinspection PyUnusedLocal
+        def parse_d(key, value):
             return dfmt.format(parse_advanced(value, parsers))
 
-        def parse_nokey(key, value):  # @UnusedVariable
+        # noinspection PyUnusedLocal
+        def parse_nokey(key, value):
             return value
 
         parsers = {
@@ -621,8 +610,8 @@ class Entity:
                 log.warning("Quality(%r) not found, referenced in %r."
                             " Assuming a zero value.", value, self)
                 return 0
-            if    key == 'q':  return squality.effective  # Current value
-            else:              return squality.value      # Base value
+            if key == 'q':  return squality.effective  # Current value
+            else:           return squality.value      # Base value
 
         def parse_d(key, value):  # @UnusedVariable
             v = int(value) if value.isdigit() else self._eval_adv(value, save=save)
@@ -651,56 +640,26 @@ class Entity:
     def __repr__(self):
         if self.name:
             return "<{} {:d}: {}>".format(self.__class__.__name__,
-                                           self.id,
-                                           repr(self.name))
+                                          self.id,
+                                          repr(self.name))
         else:
             return "<{} {:d}>".format(self.__class__.__name__,
-                                       self.id)
+                                      self.id)
 
 
     def __str__(self):
         return self.name if self.name else repr(self)
 
 
-
+# noinspection PyUnresolvedReferences
 class Quality(Entity):
     _REQUIRED_FIELDS = {'Name'}
-    _OPTIONAL_FIELDS = set((
-        "AvailableAt",
-        "Description",
-        "Image",
-
-        "ChangeDescriptionText",
-        "LevelDescriptionText",
-        "LevelImageText",
-
-        "Cap",
-        "Category",
-        'DifficultyScaler',
-        "DifficultyTestType",
-        "IsSlot",
-        "Nature",
-        "Persistent",
-        "PluralName",
-        "PyramidNumberIncreaseLimit",
-        "Tag",
-        "UsePyramidNumbers",
-        "Visible",
-
-        'AssignToSlot',
-        'Enhancements',
-        'UseEvent',
-    ))
-    _IGNORED_FIELDS  = set((
-        'AllowedOn',
-        'CssClasses',
-        'Notes',
-        'Ordering',
-        'OwnerName',
-        'QEffectPriority',
-        'QualitiesPossessedList',
-        'VariableDescriptionText',  # Only on ID=126669, "{}" (string)
-    ))
+    _OPTIONAL_FIELDS = {"AvailableAt", "Description", "Image", "ChangeDescriptionText", "LevelDescriptionText",
+                        "LevelImageText", "Cap", "Category", 'DifficultyScaler', "DifficultyTestType", "IsSlot",
+                        "Nature", "Persistent", "PluralName", "PyramidNumberIncreaseLimit", "Tag", "UsePyramidNumbers",
+                        "Visible", 'AssignToSlot', 'Enhancements', 'UseEvent'}
+    _IGNORED_FIELDS  = {'AllowedOn', 'CssClasses', 'Notes', 'Ordering', 'OwnerName', 'QEffectPriority',
+                        'QualitiesPossessedList', 'VariableDescriptionText'}
 
     _status_fields = (
         # Attribute name   JSON key                 Caption for .pretty()
@@ -760,7 +719,7 @@ class Quality(Entity):
                 log.error("Officer with no slot assignment: %r", self)
 
             if (
-                (self.category == 10000 and not self.tag == "Ship"    ) or
+                (self.category == 10000 and not self.tag == "Ship") or
                 (self.tag == "Ship"     and not self.category == 10000)
             ):
                 log.error("Category and tag mismatch for %r: %d, '%s'",
@@ -819,7 +778,7 @@ class Quality(Entity):
 
 
     def status_for(self, value):
-        #FIXME: add an option for bisect_right(), for tests on Min value (<=)
+        # FIXME: add an option for bisect_right(), for tests on Min value (<=)
         # See https://docs.python.org/3/library/bisect.html and
         #     https://code.activestate.com/recipes/577197-sortedcollection/
         def largest_lesser(d, v):
@@ -836,7 +795,8 @@ class Quality(Entity):
                 or "").rstrip('.') or ""
 
 
-    def pretty(self):
+    def pretty(self, short=False):
+        # noinspection GrazieInspection
         pretty = super().pretty()  # Super Pretty! Heh
 
         if self.availableat:
@@ -872,13 +832,13 @@ class Quality(Entity):
 
 
     def usage(self, formatting='pretty'):
-        '''
+        """
         Shows all usages, that is: all events, actions, outcomes and shops
         this appears as either a requirement, effect or tradable item
 
         Highly experimental! Ugly output! Cryptic coding! Use at your own risk!
             OTOH, this is awesome!
-        '''
+        """
 
         if not formatting == 'pretty':
             log.info("You don't want pretty, but that's what you'll get")
@@ -894,7 +854,7 @@ class Quality(Entity):
                     break
 
             for f in e.effects:
-                if r.quality.id == qid:
+                if f.quality.id == qid:
                     results.setdefault(e,
                         dict(req=None, eff=None, act={}))['eff'] = f
                     break
@@ -920,9 +880,9 @@ class Quality(Entity):
                 if qid in (i.item.id, i.currency.id):
                     results.setdefault(s, []).append(i)
 
-        def _print(e, i=0):
-            if not e:  # No object (None) or blank line ("")
-                if not i:
+        def _print(_e, _i=0):
+            if not _e:  # No object (None) or blank line ("")
+                if not _i:
                     output.append("")
                 return
 
@@ -963,7 +923,7 @@ class Quality(Entity):
                 for o in r['act'][a]['out']:
                     _print(o, 2)
                 _print("")
-            #_print("")
+            # _print("")
 
         return "\n".join(output).strip()
 
@@ -974,8 +934,8 @@ class Quality(Entity):
 
 
 class Location(Entity):
-    _REQUIRED_FIELDS = set(('Name',))
-    _OPTIONAL_FIELDS = set(('Description', 'ImageName', 'MoveMessage'))
+    _REQUIRED_FIELDS = {'Name'}
+    _OPTIONAL_FIELDS = {'Description', 'ImageName', 'MoveMessage'}
 
 
     def __init__(self, data, idx=0, ss=None):
@@ -984,7 +944,7 @@ class Location(Entity):
         self.setting = 0
 
 
-    def pretty(self):
+    def pretty(self, short=False):
         pretty = super().pretty().strip()  # No '\n' after Description
         if self.message:
             pretty += "\n\tMessage: {}".format(self._pretty_text(self.message))
@@ -993,9 +953,9 @@ class Location(Entity):
 
 
 class ShopItem(Entity):
-    _REQUIRED_FIELDS = set(("Quality", "PurchaseQuality"))
-    _OPTIONAL_FIELDS = set(("Cost", "SellPrice"))
-    _IGNORED_FIELDS  = set(("BuyMessage", "SellMessage"))  # only dummies
+    _REQUIRED_FIELDS = {"Quality", "PurchaseQuality"}
+    _OPTIONAL_FIELDS = {"Cost", "SellPrice"}
+    _IGNORED_FIELDS  = {"BuyMessage", "SellMessage"}  # only dummies
 
 
     def __init__(self, data, idx=0, ss=None, shop=None):
@@ -1007,7 +967,7 @@ class ShopItem(Entity):
         self.sell     = self._data.get('SellPrice', 0)
 
 
-    def pretty(self):
+    def pretty(self, short=False):
         sell = ", sell for {}".format(self.sell) if self.sell else ""
         return "{0.item}: {0.buy} x {0.currency}{sell}".format(self, sell=sell)
 
@@ -1015,8 +975,8 @@ class ShopItem(Entity):
     def __repr__(self):
         try:
             return ("<{0.__class__.__name__} {0.id}:"
-                     " {0.item!r} ({0.buy}, {0.sell})"
-                     " x {0.currency!r}>".format(self))
+                    " {0.item!r} ({0.buy}, {0.sell})"
+                    " x {0.currency!r}>".format(self))
         except AttributeError:
             # repr() requested by base class before __init__() finishes
             return "<{0.__class__.__name__} {0.id}>".format(self)
@@ -1028,7 +988,7 @@ class ShopItem(Entity):
 
 
 class Shop(Entity):
-    _REQUIRED_FIELDS = Entity._REQUIRED_FIELDS | set(('Availabilities',))
+    _REQUIRED_FIELDS = Entity._REQUIRED_FIELDS | {'Availabilities'}
     _IGNORED_FIELDS  = {
         'Ordering',
         'QualitiesRequired',
@@ -1047,11 +1007,11 @@ class Shop(Entity):
             return
 
         if self._data.get('QualitiesRequired'):
-            log.warn("%r have non-empty 'QualitiesRequired' list: %s", self,
-                     self._data['QualitiesRequired'])
+            log.warning("%r have non-empty 'QualitiesRequired' list: %s", self,
+                        self._data['QualitiesRequired'])
 
 
-    def pretty(self):
+    def pretty(self, short=False):
         pretty = super().pretty()
         locations = (
             "\n\tLocation: {}".format(", ".join(str(_) for _ in self.locations))
@@ -1062,9 +1022,9 @@ class Shop(Entity):
 
 
 class QualityOperator(Entity):
-    '''Base Class for Effects and Requirements
+    """Base Class for Effects and Requirements
         Subclasses MUST override _OPS and _OPTIONAL_FIELDS
-    '''
+    """
 
     # Order IS relevant, hence a tuple
     _OPS = ()
@@ -1166,8 +1126,7 @@ class Effect(QualityOperator):
 
         # Integrity check
         if TEST_INTEGRITY:
-            ops = set(self.operator) - set(('OnlyIfAtLeast',
-                                            'OnlyIfNoMoreThan'))
+            ops = set(self.operator) - {'OnlyIfAtLeast', 'OnlyIfNoMoreThan'}
             if len(ops) > 1:
                 log.error("Mutually exclusive operators in %r.%r: %s",
                           self.parent, self, ops)
@@ -1219,8 +1178,8 @@ class Effect(QualityOperator):
             sep=" ",
             showstatus=True,
     ):
-        def add(fmt, value, adv=False, *args, **kwargs):
-            posopstrs.append(fmt.format((self._parse_adv(str(value),
+        def add(fmt, _value, adv=False, *args, **kwargs):
+            posopstrs.append(fmt.format((self._parse_adv(str(_value),
                                                          advfmt, advbfmt, dfmt)
                                          if adv else value),
                                         *args, **kwargs))
@@ -1231,13 +1190,13 @@ class Effect(QualityOperator):
         ifopstrs  = []
         useqty = False  # ('Level' in ops or 'ChangeByAdvanced' in ops)
 
-        def add_status(val):
+        def add_status(_val):
             if not showstatus:
-                return val
-            s = self.quality.status_for(val)
+                return _val
+            s = self.quality.status_for(_val)
             if not s:
-                return val
-            return statusfmt.format(val, status=s)
+                return _val
+            return statusfmt.format(_val, status=s)
 
         # Loop in _OPS to preserve order
         for op in self._OPS:
@@ -1458,13 +1417,13 @@ class Requirement(QualityOperator):
             if advanced:
                 value = parse_adv(value)
                 args = tuple((parse_adv(_)  if isinstance(_,  str) else _) for _ in args)
-                kwargs = {_k:(parse_adv(_v) if isinstance(_v, str) else _v)
+                kwargs = {_k: (parse_adv(_v) if isinstance(_v, str) else _v)
                           for _k, _v in kwargs.items()}
 
             elif showstatus and optype in statusops:
                 value = add_status(value)
                 args = tuple(add_status(_) for _ in args)
-                kwargs = {_:add_status(kwargs[_]) for _ in kwargs}
+                kwargs = {_: add_status(kwargs[_]) for _ in kwargs}
 
             kwargs.update({'op': op, 'quality': self.quality})
             opstrs.append(fmts[optype].format(value, *args, **kwargs))
@@ -1492,20 +1451,16 @@ class Requirement(QualityOperator):
 
 
 class BaseEvent(Entity):
-    '''
+    """
     Base class for Event, Action and Outcome, as they have a very similar format
         Subclasses SHOULD override or extend _OPTIONAL_FIELDS
-    '''
+    """
 
-    _OPTIONAL_FIELDS = set((
-        "Name",
-        "Description",
-        "Image",
-    ))
+    _OPTIONAL_FIELDS = {"Name", "Description", "Image"}
 
     _qualop_types = dict(
         requirements=('QualitiesRequired', Requirement),  # Events and Actions
-        effects=     ('QualitiesAffected', Effect),       # Events and Outcomes
+             effects=('QualitiesAffected', Effect),       # Events and Outcomes
     )
 
 
@@ -1522,10 +1477,10 @@ class BaseEvent(Entity):
         if 'ParentEvent' in self._data:
             iid = self._data['ParentEvent']['Id']
             if not parent:
-                log.warn("%r should have parent with ID %d", self, iid)
+                log.warning("%r should have parent with ID %d", self, iid)
             elif parent.id != iid:
-                log.warn("Parent ID in object and data don't match for %r: %d vs %d",
-                         parent.id, iid)
+                log.warning("Parent ID in object and data don't match for %r: %d vs %d",
+                            parent.id, iid)
 
 
     def _apply(self, save=None):
@@ -1585,12 +1540,12 @@ class BaseEvent(Entity):
 
 
     def _pretty_qualops(self, attr, short=False):
-        '''Pretty-format lists of Requirements and Effects
+        """Pretty-format lists of Requirements and Effects
             - Does NOT add leading '\n'
             - DOES add trailing '\n' IF there is content
             - Does NOT indent the optional header
             - Indent list IF there is a header
-        '''
+        """
         out = []
         qualops = getattr(self, attr, None)
         if qualops:
@@ -1619,30 +1574,12 @@ class BaseEvent(Entity):
 
 
 class Event(BaseEvent):
-    '''"Root" events, such as Port Interactions'''
+    """"Root" events, such as Port Interactions"""
 
-    _REQUIRED_FIELDS = set((
-        'ChildBranches',
-        'QualitiesRequired',
-        'QualitiesAffected',
-    ))
-    _OPTIONAL_FIELDS = BaseEvent._OPTIONAL_FIELDS | set((
-        'Autofire',
-        'Category',
-        'LimitedToArea',
-    ))
-    _IGNORED_FIELDS  = set((
-        'CanGoBack',
-        'ChallengeLevel',
-        'Deck',
-        'Distribution',
-        'ExoticEffects',
-        'Ordering',
-        'Setting',
-        'Stickiness',
-        'Transient',
-        'Urgency',
-    ))
+    _REQUIRED_FIELDS = {'ChildBranches', 'QualitiesRequired', 'QualitiesAffected'}
+    _OPTIONAL_FIELDS = BaseEvent._OPTIONAL_FIELDS | {'Autofire', 'Category', 'LimitedToArea'}
+    _IGNORED_FIELDS  = {'CanGoBack', 'ChallengeLevel', 'Deck', 'Distribution', 'ExoticEffects', 'Ordering', 'Setting',
+                        'Stickiness', 'Transient', 'Urgency'}
 
 
     def __init__(self, data, idx=0, ss=None):
@@ -1678,10 +1615,9 @@ class Event(BaseEvent):
     check = BaseEvent._check
 
 
-    def pretty(self, short=False):
-        out = [super().pretty(location=self.location, short=short).strip()]
-
-        out.append(indent(self._pretty_qualops('effects', short=short)))
+    def pretty(self, location=None, short=False):
+        out = [super().pretty(location=self.location, short=short).strip(),
+               indent(self._pretty_qualops('effects', short=short))]
 
         if self.actions:
             out.append("\tActions: {:d}".format(len(self.actions)))
@@ -1704,7 +1640,7 @@ class Event(BaseEvent):
             '|id           = {self.id}\n'
             '|px           = 260px\n'
             '|category     = {self.category}\n'
-#            '|type         = [[Story Event#Pigmote Isle|Pigmote Isle]]'
+            # '|type         = [[Story Event#Pigmote Isle|Pigmote Isle]]'
             '{linked}'
             '}}}}\n'
             "'''{self.name_wiki}''' is a [[Sunless Sea]] [[Story Event]]{inloc}"
@@ -1769,7 +1705,7 @@ class Event(BaseEvent):
         including actions and its outcomes,
         and also Events and Locations from such outcomes
         """
-        entities = set([self])
+        entities = {self}
         qualityiters = [self.requirements, self.effects]
         for action in self.actions:
             qualityiters.append(action.requirements)
@@ -1788,21 +1724,13 @@ class Action(BaseEvent):
                       'SuccessEvent',
                       'RareSuccessEvent')
 
-    _REQUIRED_FIELDS = set((
-        'QualitiesRequired',
-        'ParentEvent',
-        'DefaultEvent',
-    ))
+    _REQUIRED_FIELDS = {'QualitiesRequired', 'ParentEvent', 'DefaultEvent'}
     _OPTIONAL_FIELDS = (
         set(BaseEvent._OPTIONAL_FIELDS) |
         set(_OUTCOME_TYPES[1:])         |
         set(_+"Chance" for _ in _OUTCOME_TYPES)
     )
-    _IGNORED_FIELDS = set((
-        'ActionCost',
-        'ButtonText',
-        'Ordering',
-    ))
+    _IGNORED_FIELDS = {'ActionCost', 'ButtonText', 'Ordering'}
 
     _outcome_label_replaces = (("Event", ""),
                                ("Rare", "Rare "),
@@ -1836,8 +1764,8 @@ class Action(BaseEvent):
             return
 
         if self._data.get('QualitiesAffected'):
-            log.warn("%r have non-null effects: %s", self,
-                     self._data['QualitiesAffected'])
+            log.warning("%r have non-null effects: %s", self,
+                        self._data['QualitiesAffected'])
 
 
     @property
@@ -1872,9 +1800,9 @@ class Action(BaseEvent):
         for effect in self.outcomes[0].effects:
             if not (len(effect.operator) == 1 and 'Level' in effect.operator): break
             value = effect.operator['Level']
-            if   (effect.quality != echo and value == +1): quality = effect.quality
-            elif (effect.quality == echo and value <   0): price   = -value
-            elif (effect.quality.name not in ('Terror', 'Fragment')): break
+            if   effect.quality != echo and value == +1: quality = effect.quality
+            elif effect.quality == echo and value <   0: price   = -value
+            elif effect.quality.name not in ('Terror', 'Fragment'): break
         if not (quality and price):
             return
         # Requirements check: find one 'Echo >= price'
@@ -1886,7 +1814,7 @@ class Action(BaseEvent):
                 break
         else:
             return
-        return quality  #, price, amount
+        return quality  # , price, amount
 
     @property
     def quality_sold(self):
@@ -1918,11 +1846,11 @@ class Action(BaseEvent):
             for effect in outcome.effects:
                 if not (len(effect.operator) == 1 and 'Level' in effect.operator): continue
                 value = effect.operator['Level']
-                if   (effect.quality == quality and value == -1): qok = True  # == -amount
-                elif (effect.quality == echo    and value >   0): eok = True  # price = value
+                if   effect.quality == quality and value == -1: qok = True  # == -amount
+                elif effect.quality == echo    and value >   0: eok = True  # price = value
             if not (qok and eok):
                 return
-        return quality  #, price, amount
+        return quality  # , price, amount
 
 
     check = BaseEvent._check
@@ -1966,7 +1894,7 @@ class Action(BaseEvent):
             result = resfunc(result)
             if showlog:
                 log.debug("%r: %s", self, re.sub(" [Dd]efault", "", str(outcome)))
-                #log.debug("%s outcome in %r: %r", loglabel.title(), self, outcome)
+                # log.debug("%s outcome in %r: %r", loglabel.title(), self, outcome)
             # Apply outcome effects
             outcome.apply(save=save)
             results.append(result)
@@ -1988,20 +1916,20 @@ class Action(BaseEvent):
         rowspan = iif(rows > 1, '| rowspan="{}"{}'.format(rows, ' ' * 14))
         note = self.gamenote  # save to avoid multiple calls to property
 
-        def innerheader(outcome):
+        def innerheader(_outcome):
             return ("| {{{{style inner header{rare} "
                     "| {label} event{chance}\n"
             ).format(
-                label  = re.sub(" [Dd]efault", "", outcome.label),
-                rare   = iif("Rare" in outcome.label, "|*}}", "}}  "),  # lame
-                chance = iif(outcome.chance, " ({}% chance)".format(outcome.chance)),
+                label  = re.sub(" [Dd]efault", "", _outcome.label),
+                rare   = iif("Rare" in _outcome.label, "|*}}", "}}  "),  # lame
+                chance = iif(_outcome.chance, " ({}% chance)".format(_outcome.chance)),
             )
 
-        def innercell(outcome):
+        def innercell(_outcome):
             return "|{}{}{}\n".format(
-                iif(outcome.idx < outcomes, " {{style inner cell}}     |"),
-                iif(outcome.name, " ", "\n"),
-                outcome.wiki(),
+                iif(_outcome.idx < outcomes, " {{style inner cell}}     |"),
+                iif(_outcome.name, " ", "\n"),
+                _outcome.wiki(),
             )
 
         outcome = self.outcomes[0]
@@ -2034,7 +1962,7 @@ class Action(BaseEvent):
 
         for outcome in self.outcomes[1:]:
             page += "|-\n{}|-\n{}".format(innerheader(outcome),
-                                            innercell(outcome))
+                                          innercell(outcome))
 
         return page
 
@@ -2051,19 +1979,9 @@ class Action(BaseEvent):
 
 
 class Outcome(BaseEvent):
-    _REQUIRED_FIELDS = set(('QualitiesAffected',))
-    _OPTIONAL_FIELDS = BaseEvent._OPTIONAL_FIELDS - {'Image'} | set((
-        'ExoticEffects',
-        'LinkToEvent',
-        'MoveToArea',
-    ))
-    _IGNORED_FIELDS  = set((
-        'Category',
-        'ChildBranches',
-        'SwitchToSetting',
-        'SwitchToSettingId',
-        'Urgency',
-    ))
+    _REQUIRED_FIELDS = {'QualitiesAffected'}
+    _OPTIONAL_FIELDS = BaseEvent._OPTIONAL_FIELDS - {'Image'} | {'ExoticEffects', 'LinkToEvent', 'MoveToArea'}
+    _IGNORED_FIELDS  = {'Category', 'ChildBranches', 'SwitchToSetting', 'SwitchToSettingId', 'Urgency'}
 
 
     def __init__(self, data, idx=0, parent=None, ss=None,
@@ -2095,12 +2013,12 @@ class Outcome(BaseEvent):
             return
 
         if self._data.get('ChildBranches'):
-            log.warn("%r have non-null 'ChildBranches': %s", self,
-                     self._data['ChildBranches'])
+            log.warning("%r have non-null 'ChildBranches': %s", self,
+                        self._data['ChildBranches'])
 
         if self._data.get('QualitiesRequired'):
-            log.warn("%r have non-null requirements: %s", self,
-                     self._data['QualitiesRequired'])
+            log.warning("%r have non-null requirements: %s", self,
+                        self._data['QualitiesRequired'])
 
 
     @property
@@ -2171,8 +2089,8 @@ class Outcome(BaseEvent):
 
 
 class Entities:
-    '''Base class for entity containers. Subclasses SHOULD override EntityCls!'''
-    EntityCls=Entity
+    """Base class for entity containers. Subclasses SHOULD override EntityCls!"""
+    EntityCls = Entity
 
 
     def __init__(self, data=None, entities=None, path=None, ss=None, _ref=None,
@@ -2194,7 +2112,7 @@ class Entities:
 
     def filter(self, attr, value):
         """Select entities where entity.attr = value"""
-        entities=(_ for _ in self if str(getattr(_, attr, "")) == str(value))
+        entities = (_ for _ in self if str(getattr(_, attr, "")) == str(value))
         return self.__class__(_ref=self, entities=entities)
 
 
@@ -2233,16 +2151,16 @@ class Entities:
         else:
             def search(x, s): return x.lower() == s.lower()
         # An idea: elif regex: def search(x, s): return re.search(x, s, re.IGNORECASE)
-        entities=(_ for _ in self if search(name, _.name))
+        entities = (_ for _ in self if search(name, _.name))
         return self.__class__(_ref=self, entities=entities)
 
 
     def find_by_id(self, eid):
-        '''Like .find(), but matching entity ID instead of name.
+        """Like .find(), but matching entity ID instead of name.
             Unlike .get() it always returns a container, either with a single
             entity or empty if none was found.
             Unlike .find(), a falsy ID will also return an empty container.
-        '''
+        """
         return self.__class__(_ref=self, entities=(_ for _ in self if _.id == eid))
 
 
@@ -2280,15 +2198,15 @@ class Entities:
 
 
     def get(self, eid, default=None):
-        '''Get entity by ID'''
+        """Get entity by ID"""
         return self._entities.get(eid, default)
 
 
     def add(self, entity, check=True):
-        '''Add an Entity to the container.
+        """Add an Entity to the container.
             Use with caution, as Entities should remain as immutable as possible
             It does NOT, for example, update any parent._data JSON
-        '''
+        """
         if check and not isinstance(entity, self.EntityCls):
             raise ValueError("Must be instance of {} to add to {}, type {} found: {}"
                              .format(self.EntityCls.__name__,
@@ -2328,7 +2246,7 @@ class Entities:
 
 
 class Qualities(Entities):
-    EntityCls=Quality
+    EntityCls = Quality
 
     def usage(self, formatting='pretty'):
         if formatting == 'wikipage':
@@ -2343,21 +2261,21 @@ class Qualities(Entities):
 
 
 class Locations(Entities):
-    EntityCls=Location
+    EntityCls = Location
 
 
 
 class Shops(Entities):
-    EntityCls=Shop
+    EntityCls = Shop
 
 
 
 class Events(Entities):
-    EntityCls=Event
+    EntityCls = Event
 
 
     def at(self, lid=0, name=""):
-        '''Return Events by location ID or name'''
+        """Return Events by location ID or name"""
         return Events(ss=self.ss,
                       entities=(_ for _
                                 in self
@@ -2394,7 +2312,8 @@ class SaveQuality:
         "Id": 0
     }
 
-    def __init__(self, data, save, idx=0, ss=None):  # @UnusedVariable
+    # noinspection PyUnusedLocal
+    def __init__(self, data, save, idx=0, ss=None):
         # ss is ignored, save.ss used instead, argument is to satisfy Entities
         self._data = data or self.TEMPLATE.copy()
         self.save  = save
@@ -2414,7 +2333,7 @@ class SaveQuality:
 
         # Modifier is a value added to (base) value
         # For example Engine Power and Stats enhancements
-        self.modifier =  self._data['EffectiveLevelModifier']
+        self.modifier = self._data['EffectiveLevelModifier']
 
         # Equipped is the quality currently assigned to a slot
         # For Officers, Ship Equipment and Current Ship
@@ -2501,6 +2420,7 @@ class SaveQuality:
     @property
     def value(self):
         return self._data['Level']
+
     @value.setter
     def value(self, value):
         value = int(value)
@@ -2516,6 +2436,7 @@ class SaveQuality:
     @property
     def xp(self):
         return self._data.get('XP', 0)
+
     @xp.setter
     def xp(self, value):
         self._data['XP'] = int(value)
@@ -2581,10 +2502,12 @@ class SaveQuality:
     def to_json(self):
         return json.dumps(self._data, indent=4, separators=(',',':'))
 
-    def bare(self, sep='\t'):  # @UnusedVariable
+    # noinspection PyUnusedLocal
+    def bare(self, sep='\t'):
         return str(self)
 
-    def pretty(self, short=False):  # @UnusedVariable
+    # noinspection PyUnusedLocal
+    def pretty(self, short=False):
         return str(self)
 
     def wiki(self):
@@ -2720,10 +2643,10 @@ class Save:
 
 
 class SunlessSea:
-    '''
+    """
         Manager class, the one that loads the JSON files
         and call each entity container's constructor
-    '''
+    """
 
 
     def __init__(self, datadir=None):
@@ -2812,38 +2735,42 @@ class SunlessSea:
                             for _l in self.settings[_]['locations'])
 
             for shop in exchange['Shops']:
-                i+=1
+                i += 1
                 yield Shop(data=shop, idx=i, ss=self, locations=locations)
 
 
     def _create_settings(self):
         # Deal with the tiles, settings, areas, locations and ports mess
         settings = {}
-        areas={}  # Integrity check only
+        areas = {}  # Integrity check only
         tiles = self._load('Tiles', subdir='geography')['data']
-        for item, aid, sid in (((_['Name'], _t['Name'], _p['Name']),
-                                _p['Area']['Id'],
-                                _p['Setting']['Id'])
-                                for _ in tiles
-                                for _t in  _['Tiles']
-                                for _p in _t['PortData']):
-                if TEST_INTEGRITY:
-                    if not areas.get(aid, sid) == sid:
-                        log.error("Area %s is not 1:1 with Settings: %s, %s",
-                                  aid, areas[aid], sid)
-                    areas[aid] = sid
+        for item, aid, sid in (
+            (
+                (_['Name'], _t['Name'], _p['Name']),
+                _p['Area']['Id'],
+                _p['Setting']['Id']
+            )
+            for _ in tiles
+            for _t in _['Tiles']
+            for _p in _t['PortData']
+        ):
+            if TEST_INTEGRITY:
+                if not areas.get(aid, sid) == sid:
+                    log.error("Area %s is not 1:1 with Settings: %s, %s",
+                              aid, areas[aid], sid)
+                areas[aid] = sid
 
-                location = self.locations.get(aid, None)
-                if location:
-                    location.setting = sid
-                else:
-                    # Dummy
-                    location = Location(data={'Id': aid}, ss=self)
-                    log.error("Location not found for port (%s): %s",
-                              ", ".join(item), aid)
+            location = self.locations.get(aid, None)
+            if location:
+                location.setting = sid
+            else:
+                # Dummy
+                location = Location(data={'Id': aid}, ss=self)
+                log.error("Location not found for port (%s): %s",
+                          ", ".join(item), aid)
 
-                settings.setdefault(
-                    sid, {'locations': set()})['locations'].add(location)
+            settings.setdefault(
+                sid, {'locations': set()})['locations'].add(location)
 
         # Requires check AND debug flags... can't possibly hide this better :)
         if TEST_INTEGRITY:
@@ -2871,8 +2798,6 @@ class SunlessSea:
             return dict(path=path, data={})
 
 
-
-
 ################################################################################
 # Import guard
 
@@ -2883,8 +2808,8 @@ if __name__ == '__main__':
         # https://docs.python.org/3/library/signal.html#note-on-sigpipe
         devnull = os.open(os.devnull, os.O_WRONLY)
         os.dup2(devnull, sys.stdout.fileno())
-    except Exception as e:
-        log.critical(e, exc_info=True)
+    except Exception as err:
+        log.critical(err, exc_info=True)
         sys.exit(1)
     except KeyboardInterrupt:
         sys.exit(2)  # signal.SIGINT.value
